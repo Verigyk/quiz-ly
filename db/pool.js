@@ -27,6 +27,18 @@ const config = process.env.DATABASE_URL
 		password: process.env.PGPASSWORD
 	};
 
+// En ligne, sans DATABASE_URL ni PGHOST, on essaierait « localhost » : aucune base n'y tourne
+if (process.env.NODE_ENV === "production" && !process.env.DATABASE_URL && !process.env.PGHOST) {
+	throw new Error(
+		"DATABASE_URL n'est pas définie. Sur Railway, ajoutez dans les variables du service du site : " +
+		"DATABASE_URL = ${{Postgres.DATABASE_URL}} (avec le nom exact de votre service PostgreSQL), puis redéployez."
+	);
+}
+
+// Indique où le site se connecte, sans afficher le mot de passe
+const target = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
+console.log(`PostgreSQL : ${target ? `${target.hostname}:${target.port || 5432}${target.pathname}` : `${config.host}:${config.port}/${config.database}`}`);
+
 module.exports = new Pool({
 	...config,
 	ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined,
