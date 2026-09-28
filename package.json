@@ -5,6 +5,7 @@
   "main": "app.js",
   "scripts": {
     "start": "node app.js",
+    "setup": "node db/setup.js",
     "populate": "node db/populate.js",
     "migrate": "node db/migrate.js",
     "create-admin": "node db/createAdmin.js",
@@ -14,11 +15,15 @@
   "type": "commonjs",
   "dependencies": {
     "bcrypt": "^6.0.0",
+    "connect-pg-simple": "^10.0.0",
     "ejs": "^6.0.1",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "passport": "^0.7.0",
     "passport-local": "^1.0.0",
     "pg": "^8.23.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

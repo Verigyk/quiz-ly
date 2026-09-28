@@ -10,10 +10,28 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 const session = require("express-session");
+const PgSession = require("connect-pg-simple")(session);
+const pool = require("./db/pool");
+
+// En ligne (Railway), SESSION_SECRET doit être une longue chaîne aléatoire gardée secrète
+if (process.env.NODE_ENV === "production" && !process.env.SESSION_SECRET) {
+    throw new Error("La variable SESSION_SECRET est obligatoire en production.");
+}
+
+// Railway place le site derrière un proxy HTTPS
+app.set("trust proxy", 1);
+
+// Les sessions sont gardées dans PostgreSQL : un redémarrage ne déconnecte plus les élèves
 app.use(session({
-    secret: "quiz-secret",
+    store: new PgSession({ pool, createTableIfMissing: true }),
+    secret: process.env.SESSION_SECRET || "quiz-secret",
     resave: false,
-    saveUninitialized: false
+    saveUninitialized: false,
+    cookie: {
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax"
+    }
 }));
 
 app.set("views", path.join(__dirname, "views"));
@@ -60,7 +78,8 @@ function requireAdmin(req, res, next) {
 app.use("/quiz", requireLogin, loadCompanion, quizRouter);
 app.use("/admin", requireAdmin, adminRouter);
 
-const PORT = 3000;
+// Railway indique le port à utiliser dans PORT
+const PORT = Number(process.env.PORT) || 3000;
 app.listen(PORT, (error) => {
     // This is important!
     // Without this, any startup errors will silently fail
