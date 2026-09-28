@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <%- include("partials/head", { title: "Connexion" }) %>
+</head>
+
+<body>
+    <%- include("partials/sky") %>
+
+    <main class="portal-page">
+        <div class="portal">
+            <div class="card reveal <%= error ? 'error-shake' : '' %>">
+                <h1 class="title"><%= siteName %></h1>
+                <p class="subtitle" data-random="<%= JSON.stringify([
+                    "Prêt·e pour ta séance de révisions ?",
+                    "Un petit quiz pour progresser en maths.",
+                    "Tes exercices du jour t'attendent.",
+                    "Connecte-toi pour retrouver tes quiz."
+                ]) %>">Connecte-toi pour retrouver tes quiz.</p>
+
+                <% if (error) { %>
+                    <div class="notice error">Identifiant ou mot de passe incorrect.</div>
+                <% } %>
+
+                <form method="POST" action="/connection">
+                    <div class="field">
+                        <label for="username">Identifiant</label>
+                        <input class="input" type="text" id="username" name="username" required autocomplete="username" autofocus />
+                    </div>
+                    <div class="field">
+                        <label for="password">Mot de passe</label>
+                        <input class="input" type="password" id="password" name="password" required autocomplete="current-password" />
+                    </div>
+                    <button type="submit" class="btn gold big" style="width: 100%">Se connecter</button>
+                </form>
+                <p class="muted small" style="margin-bottom: 0">Pas encore de compte ? Demande-le à ton professeur.</p>
+            </div>
+        </div>
+    </main>
+</body>
+
+</html>

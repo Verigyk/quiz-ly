@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Mes élèves</title>
+	<link rel="stylesheet" href="/admin.css" />
+</head>
+
+<body>
+	<%- include("nav", { active: "eleves" }) %>
+
+	<main>
+		<h1>Mes élèves</h1>
+
+		<% if (flash) { %>
+			<div class="flash <%= flash.type %>"><%= flash.text %></div>
+		<% } %>
+
+		<div class="card">
+			<h2>Ajouter un élève</h2>
+			<form method="POST" action="/admin/eleves" class="actions">
+				<input type="text" name="username" placeholder="Identifiant" required autocomplete="off" />
+				<input type="password" name="password" placeholder="Mot de passe (4 caractères min.)" required minlength="4" autocomplete="new-password" />
+				<button type="submit">Créer le compte</button>
+			</form>
+		</div>
+
+		<div class="card">
+			<h2><%= students.length %> élève<%= students.length > 1 ? "s" : "" %></h2>
+			<% if (students.length === 0) { %>
+				<p class="muted">Aucun élève pour l'instant. Créez leurs comptes ci-dessus.</p>
+			<% } else { %>
+				<div class="table-scroll">
+					<table>
+						<tr>
+							<th>Élève</th>
+							<th>Quiz terminés</th>
+							<th>Moyenne</th>
+							<th>Points</th>
+							<th>Dernière activité</th>
+							<th>Nouveau mot de passe</th>
+							<th></th>
+						</tr>
+						<% students.forEach((s) => { const path = "/admin/eleves/" + encodeURIComponent(s.username); %>
+							<tr>
+								<td><a href="<%= path %>"><strong><%= s.username %></strong></a></td>
+								<td>
+									<%= s.completed %>
+									<% if (s.attempts > s.completed) { %><span class="muted">(+<%= s.attempts - s.completed %> abandonné<%= s.attempts - s.completed > 1 ? "s" : "" %>)</span><% } %>
+								</td>
+								<td><%= s.average === null ? "—" : s.average + " %" %></td>
+								<td>🪙 <%= s.points %></td>
+								<td><%= s.last_activity ? s.last_activity.toLocaleString("fr-FR") : "—" %></td>
+								<td>
+									<form method="POST" action="<%= path %>/mot-de-passe" class="inline">
+										<input type="password" name="password" required minlength="4" placeholder="••••" autocomplete="new-password" size="10" />
+										<button type="submit" class="secondary">Changer</button>
+									</form>
+								</td>
+								<td class="actions">
+									<a href="<%= path %>">Historique</a>
+									<form method="POST" action="<%= path %>/supprimer" class="inline"
+										onsubmit="return confirm('Supprimer <%= s.username.replace(/['\\]/g, '') %> et tout son historique ?')">
+										<button type="submit" class="danger">Supprimer</button>
+									</form>
+								</td>
+							</tr>
+						<% }) %>
+					</table>
+				</div>
+			<% } %>
+		</div>
+	</main>
+</body>
+
+</html>

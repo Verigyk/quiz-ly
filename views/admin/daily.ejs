@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Quiz du jour</title>
+	<link rel="stylesheet" href="/admin.css" />
+	<style>
+		.planning th, .planning td { min-width: 130px; }
+		.planning th:first-child, .planning td:first-child { min-width: 110px; position: sticky; left: 0; background: #1a1240; z-index: 1; }
+		.planning select { width: 100%; font-size: 0.85rem; padding: 4px; }
+		.planning .today { background: rgba(123, 92, 255, 0.14); }
+		.planning .class-row td { background: rgba(255, 210, 122, 0.08); border-bottom: 2px solid var(--border); }
+		.planning .custom { border-color: var(--gold); background: rgba(255, 210, 122, 0.12); }
+		.planning .none { color: var(--muted); }
+		.planning .cell-text { font-size: 0.85rem; }
+		.done { color: var(--ok); font-weight: 600; }
+		.week-nav { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+	</style>
+</head>
+
+<body>
+	<%- include("nav", { active: "quotidien" }) %>
+
+	<main>
+		<h1>Quiz du jour</h1>
+		<p class="muted">
+			La ligne <strong>Toute la classe</strong> fixe le quiz de chaque jour. Pour un élève, laissez « Comme la classe »
+			ou choisissez un autre quiz (ou « Pas de quiz »). Les cases personnalisées sont en bleu.
+			Les jours passés ne sont plus modifiables ; ✔ indique un quiz du jour terminé.
+		</p>
+
+		<% if (flash) { %>
+			<div class="flash <%= flash.type %>"><%= flash.text %></div>
+		<% } %>
+
+		<div class="week-nav">
+			<a class="button secondary" href="/admin/quotidien?semaine=<%= week.previous %>">← Semaine précédente</a>
+			<strong>Semaine du <%= week.days[0].label.replace(/^\S+ /, "") %> au <%= week.days[6].label.replace(/^\S+ /, "") %></strong>
+			<a class="button secondary" href="/admin/quotidien?semaine=<%= week.next %>">Semaine suivante →</a>
+			<a href="/admin/quotidien">Cette semaine</a>
+		</div>
+
+		<% const titles = Object.fromEntries(quizzes.map((q) => [q.id, q.title])); %>
+
+		<% if (quizzes.length === 0) { %>
+			<div class="card"><p>Vous n'avez encore aucun quiz. <a href="/admin/quiz/nouveau">Créez-en un</a> pour pouvoir le programmer.</p></div>
+		<% } else { %>
+			<form method="POST" action="/admin/quotidien" class="card">
+				<input type="hidden" name="semaine" value="<%= week.start %>" />
+				<div class="table-scroll">
+					<table class="planning">
+						<tr>
+							<th></th>
+							<% week.days.forEach((d) => { %>
+								<th class="<%= d.isToday ? 'today' : '' %>" style="text-transform: capitalize">
+									<%= d.label.replace(/ \S+$/, "") %>
+									<% if ((d.isPast || d.isToday) && d.assigned > 0) { %>
+										<div class="muted" style="text-transform: none">Fait : <%= d.done %> / <%= d.assigned %></div>
+									<% } %>
+								</th>
+							<% }) %>
+						</tr>
+
+						<tr class="class-row">
+							<td><strong>Toute la classe</strong></td>
+							<% week.days.forEach((d) => { %>
+								<td class="<%= d.isToday ? 'today' : '' %>">
+									<% if (d.isPast) { %>
+										<span class="cell-text"><%= d.quizId ? titles[d.quizId] || "Quiz supprimé" : "—" %></span>
+									<% } else { %>
+										<select name="classe[<%= d.day %>]" class="class-select" data-day="<%= d.day %>">
+											<option value="">— Pas de quiz —</option>
+											<% quizzes.forEach((q) => { %>
+												<option value="<%= q.id %>" <%= q.id === d.quizId ? "selected" : "" %>><%= q.title %></option>
+											<% }) %>
+										</select>
+									<% } %>
+								</td>
+							<% }) %>
+						</tr>
+
+						<% if (week.rows.length === 0) { %>
+							<tr><td colspan="8" class="muted">Aucun élève : <a href="/admin">créez leurs comptes</a> pour leur attribuer un quiz particulier.</td></tr>
+						<% } %>
+
+						<% week.rows.forEach((row) => { %>
+							<tr>
+								<td><a href="/admin/eleves/<%= encodeURIComponent(row.username) %>"><%= row.username %></a></td>
+								<% row.cells.forEach((cell, i) => { const d = week.days[i]; %>
+									<td class="<%= d.isToday ? 'today' : '' %>">
+										<% if (d.isPast) { %>
+											<span class="cell-text <%= cell.quizId === null ? 'none' : '' %>">
+												<%= cell.quizId === null ? "—" : titles[cell.quizId] || "Quiz supprimé" %>
+											</span>
+										<% } else { %>
+											<select name="eleves[<%= row.username %>][<%= d.day %>]"
+												class="student-select <%= cell.choice !== 'classe' ? 'custom' : '' %>" data-day="<%= d.day %>">
+												<option value="classe" <%= cell.choice === "classe" ? "selected" : "" %>>Comme la classe</option>
+												<option value="aucun" <%= cell.choice === "aucun" ? "selected" : "" %>>Pas de quiz</option>
+												<% quizzes.forEach((q) => { %>
+													<option value="<%= q.id %>" <%= String(q.id) === cell.choice ? "selected" : "" %>><%= q.title %></option>
+												<% }) %>
+											</select>
+										<% } %>
+										<% if (cell.done) { %><span class="done" title="Terminé ce jour-là">✔</span><% } %>
+									</td>
+								<% }) %>
+							</tr>
+						<% }) %>
+					</table>
+				</div>
+
+				<div class="actions" style="margin-top: 16px">
+					<button type="submit">Enregistrer la semaine</button>
+					<span class="muted">Raccourcis pour la classe :</span>
+					<select id="fillAll">
+						<option value="">— Même quiz tous les jours restants —</option>
+						<% quizzes.forEach((q) => { %>
+							<option value="<%= q.id %>"><%= q.title %></option>
+						<% }) %>
+					</select>
+					<button type="button" class="secondary" id="resetStudents">Tous les élèves « comme la classe »</button>
+				</div>
+			</form>
+		<% } %>
+	</main>
+
+	<script>
+		const classSelects = document.querySelectorAll(".class-select");
+		const studentSelects = document.querySelectorAll(".student-select");
+
+		// Met en évidence les cases qui ne suivent pas la classe
+		studentSelects.forEach((s) => s.addEventListener("change", () => s.classList.toggle("custom", s.value !== "classe")));
+
+		document.getElementById("fillAll")?.addEventListener("change", (e) => {
+			if (e.target.value) classSelects.forEach((s) => { s.value = e.target.value; });
+		});
+		document.getElementById("resetStudents")?.addEventListener("click", () => {
+			studentSelects.forEach((s) => { s.value = "classe"; s.classList.remove("custom"); });
+		});
+	</script>
+</body>
+
+</html>

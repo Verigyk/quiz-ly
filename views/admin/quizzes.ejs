@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Mes quiz</title>
+	<link rel="stylesheet" href="/admin.css" />
+</head>
+
+<body>
+	<%- include("nav", { active: "quiz" }) %>
+
+	<main>
+		<div class="actions" style="justify-content: space-between">
+			<h1>Mes quiz</h1>
+			<a class="button" href="/admin/quiz/nouveau">+ Créer un quiz</a>
+		</div>
+
+		<% if (flash) { %>
+			<div class="flash <%= flash.type %>"><%= flash.text %></div>
+		<% } %>
+
+		<div class="card table-scroll">
+			<table>
+				<tr>
+					<th>Quiz</th>
+					<th>Questions</th>
+					<th>Réglages</th>
+					<th></th>
+				</tr>
+				<% quizzes.forEach((q) => { %>
+					<tr>
+						<td>
+							<strong><%= q.title %></strong>
+							<% if (q.description) { %><div class="muted"><%= q.description %></div><% } %>
+						</td>
+						<td><%= q.count %></td>
+						<td>
+							<% if (q.generated) { %>
+								<span class="tag"><%= q.config.regenerate ? "Nouvelles questions à chaque tentative" : "Questions figées" %></span>
+								<span class="tag"><%= q.config.choiceCount %> réponses</span>
+								<span class="tag"><%= trapModes[q.config.trapMode].split(" :")[0] %></span>
+								<div class="muted"><%= q.config.items.length %> type<%= q.config.items.length > 1 ? "s" : "" %> de questions</div>
+							<% } else { %>
+								<span class="muted">Quiz écrit à la main</span>
+							<% } %>
+						</td>
+						<td class="actions">
+							<% if (q.generated) { %>
+								<a href="/admin/quiz/<%= q.id %>/modifier">Modifier</a>
+							<% } %>
+							<form method="POST" action="/admin/quiz/<%= q.id %>/supprimer" class="inline"
+								onsubmit="return confirm('Supprimer ce quiz ? L\'historique des élèves sera conservé.')">
+								<button type="submit" class="danger">Supprimer</button>
+							</form>
+						</td>
+					</tr>
+				<% }) %>
+			</table>
+		</div>
+	</main>
+</body>
+
+</html>

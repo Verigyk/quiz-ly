@@ -1,0 +1,16 @@
+<header class="topbar">
+	<a class="brand" href="/accueil"><span class="glyph">✦</span> <%= siteName %></a>
+	<div class="chips">
+		<% if (typeof companion !== "undefined" && companion) { %>
+			<a class="coins" href="/compagnon" title="Mes points et la boutique">🪙 <%= companion.points %></a>
+			<a class="btn ghost small" href="/compagnon">🧒 <%= companion.name %></a>
+		<% } %>
+		<% if (typeof isAdmin !== "undefined" && isAdmin) { %>
+			<a class="btn ghost small" href="/admin">Espace professeur</a>
+		<% } %>
+		<a class="btn ghost small" href="/accueil/historique">Mon historique</a>
+		<form method="POST" action="/logout">
+			<button type="submit" class="btn ghost small">Se déconnecter</button>
+		</form>
+	</div>
+</header>

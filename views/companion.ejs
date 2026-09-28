@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<%- include("partials/head", { title: companion.name }) %>
+</head>
+
+<body>
+	<%- include("partials/sky") %>
+
+	<div class="page">
+		<%- include("partials/topbar", { isAdmin }) %>
+
+		<section class="card companion-hero reveal">
+			<div class="stage">
+				<%- include("partials/kid", { mood: flash && flash.type === "success" ? "heureux" : companion.mood, equipped: companion.equipped }) %>
+			</div>
+			<div>
+				<h1 class="title"><%= companion.name %></h1>
+				<div class="muted">Humeur : <strong><%= companion.moodLabel %></strong></div>
+				<div class="mood-bar" title="<%= companion.happiness %> / 100"><span class="<%= companion.mood %>" style="width: <%= companion.happiness %>%"></span></div>
+				<div class="muted small">
+					<%= companion.gifts %> cadeau<%= companion.gifts > 1 ? "x" : "" %> reçu<%= companion.gifts > 1 ? "s" : "" %>
+					· <%= companion.name %> s'ennuie un peu quand tu ne viens pas, et adore quand tu termines des quiz.
+				</div>
+
+				<div class="speech">
+					<% if (flash) { %>
+						<%= flash.type === "success" ? flash.text : "Hmm… " + flash.text %>
+					<% } else { %>
+						<%= companionLine(companion, "boutique") %>
+					<% } %>
+				</div>
+
+				<div class="chips">
+					<span class="coins">🪙 <%= companion.points %> points</span>
+					<form method="POST" action="/compagnon/prenom" class="inline-form">
+						<input class="input" type="text" name="name" value="<%= companion.name %>" maxlength="20" required aria-label="Prénom du compagnon" />
+						<button type="submit" class="btn ghost small">Renommer</button>
+					</form>
+					<form method="POST" action="/compagnon/visibilite" class="inline-form">
+						<input type="hidden" name="visible" value="<%= companion.visible ? '0' : '1' %>" />
+						<button type="submit" class="btn ghost small"><%= companion.visible ? "Ne plus m'afficher pendant les quiz" : "M'afficher sur toutes les pages" %></button>
+					</form>
+				</div>
+			</div>
+		</section>
+
+		<p class="muted small reveal">
+			💡 Comment gagner des points : 10 points par bonne réponse, +20 pour un sans-faute, +15 pour le quiz du jour.
+			Un même quiz rapporte des points 3 fois par jour maximum.
+		</p>
+
+		<h2 class="section-title reveal" id="boutique">🎁 Faire plaisir à <%= companion.name %></h2>
+		<div class="shop">
+			<% items.filter((it) => it.kind === "cadeau").forEach((it) => { const affordable = companion.points >= it.price; %>
+				<article class="card shop-item reveal <%= affordable ? '' : 'locked' %> <%= flash && flash.item === it.id ? 'new' : '' %>">
+					<div class="icon" aria-hidden="true"><%= it.icon %></div>
+					<h3><%= it.name %></h3>
+					<div class="muted small">+<%= it.joy %> de bonheur</div>
+					<div class="price">🪙 <%= it.price %></div>
+					<form method="POST" action="/compagnon/acheter/<%= it.id %>">
+						<button type="submit" class="btn small" <%= affordable ? "" : "disabled" %>>Offrir</button>
+					</form>
+				</article>
+			<% }) %>
+		</div>
+
+		<h2 class="section-title reveal" id="tenues">👕 Tenues</h2>
+		<div class="shop">
+			<% items.filter((it) => it.kind === "tenue").forEach((it) => {
+				const owned = companion.owned.includes(it.id);
+				const worn = companion.equipped[it.slot] === it.id;
+				const affordable = companion.points >= it.price; %>
+				<article class="card shop-item reveal <%= owned || affordable ? '' : 'locked' %> <%= flash && flash.item === it.id ? 'new' : '' %>">
+					<div class="icon" aria-hidden="true"><%= it.icon %></div>
+					<h3><%= it.name %></h3>
+					<div class="muted small"><%= slots[it.slot] %></div>
+					<% if (owned) { %>
+						<form method="POST" action="/compagnon/porter/<%= it.id %>">
+							<input type="hidden" name="on" value="<%= worn ? '0' : '1' %>" />
+							<button type="submit" class="btn small <%= worn ? 'ghost' : '' %>"><%= worn ? "Retirer" : "Porter" %></button>
+						</form>
+					<% } else { %>
+						<div class="price">🪙 <%= it.price %></div>
+						<form method="POST" action="/compagnon/acheter/<%= it.id %>">
+							<button type="submit" class="btn small" <%= affordable ? "" : "disabled" %>>Acheter</button>
+						</form>
+					<% } %>
+				</article>
+			<% }) %>
+		</div>
+	</div>
+
+	<% if (flash && flash.type === "success") { %>
+		<script>window.addEventListener("load", () => setTimeout(() => window.arcanesConfetti?.(30), 300));</script>
+	<% } %>
+</body>
+
+</html>

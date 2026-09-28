@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <%- include("partials/head", { title: detail.title }) %>
+</head>
+
+<body>
+    <%- include("partials/sky") %>
+
+    <div class="page narrow">
+        <header class="topbar">
+            <a class="brand" href="<%= backLink.href %>"><span class="glyph">✦</span> <%= siteName %></a>
+            <a class="btn ghost small" href="<%= backLink.href %>">← <%= backLink.label %></a>
+        </header>
+
+        <h1 class="title reveal"><%= detail.title %></h1>
+        <p class="subtitle reveal">
+            Score : <strong><%= detail.score %> / <%= detail.total %></strong>
+            <% if (!detail.completed) { %>· abandonné après <%= detail.answered %> / <%= detail.total %> questions<% } %>
+            · <%= detail.completed_at.toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" }) %>
+        </p>
+
+        <% detail.answers.forEach((a, i) => { const good = a.chosen === a.answer; %>
+            <section class="card review reveal">
+                <h3><%= good ? "✅" : "❌" %> Question <%= i + 1 %> : <%= a.text %></h3>
+                <% if (a.chosen === -1) { %><p class="muted">Aucune réponse donnée.</p><% } %>
+                <ul>
+                    <% a.choices.forEach((choice, c) => { %>
+                        <li class="<%= c === a.answer ? 'correct' : (c === a.chosen ? 'wrong' : '') %>">
+                            <%= choice %>
+                            <% if (c === a.answer) { %><span class="badge">✔ bonne réponse</span><% } %>
+                            <% if (c === a.chosen && c !== a.answer) { %><span class="badge">← réponse choisie</span><% } %>
+                        </li>
+                    <% }) %>
+                </ul>
+            </section>
+        <% }) %>
+    </div>
+    <%- include("partials/companion", { context: "historique" }) %>
+</body>
+
+</html>

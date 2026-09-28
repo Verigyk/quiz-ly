@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<%- include("partials/head", { title: "Accueil" }) %>
+</head>
+
+<body>
+	<%- include("partials/sky") %>
+
+	<div class="page">
+		<%- include("partials/topbar", { isAdmin }) %>
+
+		<section class="reveal">
+			<h1 class="title" data-random="<%= JSON.stringify([
+				`Bonjour ${username} !`,
+				`Content de te revoir, ${username} !`,
+				`Salut ${username}, prêt·e à réviser ?`,
+				`C'est parti, ${username} !`
+			]) %>">Bonjour <%= username %> !</h1>
+			<p class="subtitle">Choisis un quiz pour t'entraîner. Tu peux le refaire autant de fois que tu veux.</p>
+		</section>
+
+		<div class="omen reveal">
+			<div class="orb" aria-hidden="true"></div>
+			<div>
+				<strong>Conseil du jour</strong><br />
+				<span class="muted" data-random="<%= JSON.stringify([
+					"Attention aux signes « moins » devant une parenthèse : ils changent tous les signes à l'intérieur.",
+					"(a + b)² n'est pas égal à a² + b² : n'oublie pas le double produit 2ab !",
+					"Relis la question jusqu'au bout avant de répondre : « factoriser au maximum » ne veut pas dire « factoriser un peu ».",
+					"Pour vérifier un développement, remplace x par 1 dans l'expression de départ et dans ta réponse.",
+					"Diviser par une fraction, c'est multiplier par son inverse.",
+					"Quand on divise une inéquation par un nombre négatif, le sens de l'inégalité change.",
+					"Deux baisses de 10 % ne font pas une baisse de 20 % : pense aux coefficients multiplicateurs.",
+					"Une erreur, c'est une occasion d'apprendre : regarde la correction dans ton historique.",
+					"Si deux réponses se ressemblent beaucoup, l'une d'elles est sûrement un piège.",
+					"Un peu chaque jour vaut mieux que beaucoup la veille du contrôle."
+				]) %>">…</span>
+			</div>
+		</div>
+
+		<% if (dailyQuiz) { %>
+			<section class="card prophecy reveal">
+				<div class="label">Quiz du jour</div>
+				<h2><%= dailyQuiz.title %></h2>
+				<% if (dailyQuiz.description) { %><p class="muted"><%= dailyQuiz.description %></p><% } %>
+				<% if (dailyQuiz.done) { %>
+					<p class="done">✔ Fait aujourd'hui — meilleur score : <%= dailyQuiz.score %> / <%= dailyQuiz.total %></p>
+				<% } else { %>
+					<p class="muted">Choisi par ton professeur pour aujourd'hui.</p>
+				<% } %>
+				<form method="POST" action="/quiz/<%= dailyQuiz.id %>/start">
+					<button type="submit" class="btn gold big"><%= dailyQuiz.done ? "Améliorer mon score" : "Commencer le quiz du jour" %></button>
+				</form>
+			</section>
+		<% } %>
+
+		<% if (inProgress) { %>
+			<section class="card resume reveal">
+				<div>
+					<strong>Quiz en cours : <%= inProgress.title %></strong>
+					<div class="muted small">Question <%= inProgress.number %> / <%= inProgress.total %> — reprends là où tu t'étais arrêté·e.</div>
+				</div>
+				<a class="btn" href="/quiz/question">Reprendre</a>
+			</section>
+		<% } %>
+
+		<h2 class="section-title reveal">Mes quiz</h2>
+
+		<div class="portals">
+			<% const icons = ["∑", "π", "√", "x²", "%", "∫", "÷", "∞", "≈", "f(x)", "△", "½"]; %>
+			<% quizzes.forEach((quiz) => { const current = inProgress && inProgress.quizId === quiz.id; %>
+				<article class="card portal-card reveal" style="--hue: <%= (quiz.id * 67) % 360 %>">
+					<div class="sigil" aria-hidden="true"><%= icons[quiz.id % icons.length] %></div>
+					<h3><%= quiz.title %></h3>
+					<div class="muted small grow">
+						<%= quiz.count %> question<%= quiz.count > 1 ? "s" : "" %>
+						<% if (quiz.description) { %><br /><%= quiz.description %><% } %>
+					</div>
+					<form method="POST" action="/quiz/<%= quiz.id %>/start">
+						<% if (current) { %>
+							<a class="btn small" href="/quiz/question">Reprendre (<%= inProgress.number %>/<%= inProgress.total %>)</a>
+							<button type="submit" class="btn ghost small">Recommencer</button>
+						<% } else { %>
+							<button type="submit" class="btn small">Commencer</button>
+						<% } %>
+					</form>
+				</article>
+			<% }) %>
+		</div>
+	</div>
+
+	<%- include("partials/companion", { context: "accueil" }) %>
+</body>
+
+</html>

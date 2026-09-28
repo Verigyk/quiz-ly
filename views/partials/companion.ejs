@@ -1,0 +1,27 @@
+<%
+	// Compagnon dans le coin de la page. Paramètres : context (page), event (réponse juste/fausse, score…)
+	const ev = typeof event !== "undefined" && event ? event : {};
+	const reaction = ev.correct === true ? "jump" : ev.correct === false ? "comfort" : "";
+%>
+<% if (typeof companion !== "undefined" && companion) { %>
+	<% if (companion.visible) { %>
+		<aside class="buddy <%= reaction %>" aria-live="polite">
+			<div class="buddy-bubble">
+				<strong><%= companion.name %></strong>
+				<span><%= companionLine(companion, context, ev) %></span>
+			</div>
+			<a class="buddy-kid" href="/compagnon" title="Voir <%= companion.name %>">
+				<%- include("kid", { mood: ev.correct === true ? "heureux" : companion.mood, equipped: companion.equipped }) %>
+			</a>
+			<form method="POST" action="/compagnon/visibilite" class="buddy-hide">
+				<input type="hidden" name="visible" value="0" />
+				<button type="submit" title="Cacher <%= companion.name %>" aria-label="Cacher <%= companion.name %>">×</button>
+			</form>
+		</aside>
+	<% } else { %>
+		<form method="POST" action="/compagnon/visibilite" class="buddy-show">
+			<input type="hidden" name="visible" value="1" />
+			<button type="submit" class="btn ghost small" title="Faire revenir <%= companion.name %>">👋 <%= companion.name %></button>
+		</form>
+	<% } %>
+<% } %>

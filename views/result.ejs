@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <%- include("partials/head", { title: "Résultat" }) %>
+</head>
+
+<body>
+    <%- include("partials/sky") %>
+
+    <div class="page narrow">
+        <section class="card result reveal">
+            <div class="muted">Quiz terminé : <strong><%= result.title %></strong></div>
+            <div class="rank"><%= result.rank.icon %> <%= result.rank.name %></div>
+
+            <div class="score"><span data-count="<%= result.score %>">0</span><small> / <%= result.total %></small></div>
+
+            <% if (result.points > 0) { %>
+                <div class="points-earned">+<span data-count="<%= result.points %>">0</span> points 🪙</div>
+                <% if (result.dailyBonus) { %><div class="muted small">dont +15 pour le quiz du jour</div><% } %>
+            <% } else if (result.limitReached) { %>
+                <div class="muted small">Ce quiz t'a déjà rapporté des points 3 fois aujourd'hui : essaie un autre quiz pour en gagner !</div>
+            <% } %>
+
+            <%
+                // Constellation : une étoile par question, dorée si réussie, reliées en zigzag
+                const n = result.marks.length;
+                const width = 600, height = 160;
+                const points = result.marks.map((good, i) => ({
+                    x: n === 1 ? width / 2 : 30 + (i * (width - 60)) / (n - 1),
+                    y: 40 + ((i * 37) % 3) * 40 + (i % 2) * 15,
+                    good
+                }));
+            %>
+            <svg class="constellation" viewBox="0 0 <%= width %> <%= height %>" aria-label="<%= result.score %> bonnes réponses sur <%= result.total %>">
+                <% points.slice(1).forEach((p, i) => { %>
+                    <line x1="<%= points[i].x %>" y1="<%= points[i].y %>" x2="<%= p.x %>" y2="<%= p.y %>" style="animation-delay: <%= 0.3 + i * 0.15 %>s" />
+                <% }) %>
+                <% points.forEach((p, i) => { %>
+                    <path class="star <%= p.good ? 'good' : 'bad' %>" style="animation-delay: <%= 0.2 + i * 0.15 %>s"
+                        d="M<%= p.x %> <%= p.y - 12 %> L<%= p.x + 3.5 %> <%= p.y - 3.5 %> L<%= p.x + 12 %> <%= p.y %> L<%= p.x + 3.5 %> <%= p.y + 3.5 %> L<%= p.x %> <%= p.y + 12 %> L<%= p.x - 3.5 %> <%= p.y + 3.5 %> L<%= p.x - 12 %> <%= p.y %> L<%= p.x - 3.5 %> <%= p.y - 3.5 %> Z" />
+                <% }) %>
+            </svg>
+
+            <p class="muted" data-random="<%= JSON.stringify(
+                result.score === result.total
+                    ? ['Sans faute ! Tu maîtrises parfaitement ce chapitre.', 'Aucune erreur, bravo !']
+                    : result.score / result.total >= 0.6
+                        ? ['Très bien ! Regarde tes erreurs dans l\u2019historique pour viser le sans-faute.', 'Bon travail, tu es sur la bonne voie.']
+                        : ['Relis la correction dans ton historique, puis retente le quiz.', 'Pas de panique : c\u2019est en s\u2019entraînant qu\u2019on progresse. Réessaie !']
+            ) %>">…</p>
+
+            <div class="chips" style="justify-content: center; margin-top: 20px">
+                <a class="btn gold" href="/accueil">Retour à l'accueil</a>
+                <a class="btn ghost" href="/accueil/historique">Voir la correction</a>
+                <% if (result.points > 0) { %><a class="btn ghost" href="/compagnon#boutique">🎁 Aller à la boutique</a><% } %>
+            </div>
+        </section>
+    </div>
+
+    <% if (result.total && result.score / result.total >= 0.6) { %>
+        <script>window.addEventListener("load", () => setTimeout(() => window.arcanesConfetti?.(<%= result.score === result.total ? 50 : 25 %>), 600));</script>
+    <% } %>
+    <%- include("partials/companion", { context: "resultat", event: { score: result.score, total: result.total } }) %>
+</body>
+
+</html>

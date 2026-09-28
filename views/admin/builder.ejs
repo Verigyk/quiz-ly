@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title><%= quizId === null ? "Créer un quiz" : "Modifier le quiz" %></title>
+	<link rel="stylesheet" href="/admin.css" />
+</head>
+
+<body>
+	<%- include("nav", { active: "quiz" }) %>
+
+	<main>
+		<h1><%= quizId === null ? "Créer un quiz" : "Modifier le quiz" %></h1>
+
+		<div id="error" class="flash error" hidden></div>
+
+		<form id="builder">
+			<div class="card">
+				<h2>1. Informations</h2>
+				<div class="field">
+					<label for="title">Titre</label>
+					<input type="text" id="title" required maxlength="100" placeholder="Ex. : Développements et factorisations" />
+				</div>
+				<div class="field">
+					<label for="description">Consigne pour les élèves (facultatif)</label>
+					<textarea id="description" maxlength="500" placeholder="Ex. : Attention aux signes !"></textarea>
+				</div>
+			</div>
+
+			<div class="card">
+				<h2>2. Réglages</h2>
+				<div class="grid">
+					<div>
+						<label for="questionCount">Nombre de questions</label>
+						<input type="number" id="questionCount" min="<%= limits.questionCount[0] %>" max="<%= limits.questionCount[1] %>" value="10" required />
+					</div>
+					<div>
+						<label for="choiceCount">Réponses proposées par question</label>
+						<input type="number" id="choiceCount" min="<%= limits.choiceCount[0] %>" max="<%= limits.choiceCount[1] %>" value="4" required />
+					</div>
+					<div>
+						<label for="trapMode">Mauvaises réponses</label>
+						<select id="trapMode">
+							<% Object.entries(trapModes).forEach(([id, label]) => { %>
+								<option value="<%= id %>"><%= label %></option>
+							<% }) %>
+						</select>
+					</div>
+					<div>
+						<label for="order">Ordre des questions</label>
+						<select id="order">
+							<option value="melange">Mélangé</option>
+							<option value="groupe">Groupé par type (dans l'ordre ci-dessous)</option>
+						</select>
+					</div>
+					<div>
+						<label for="regenerate">Questions</label>
+						<select id="regenerate">
+							<option value="true">Nouvelles questions à chaque tentative</option>
+							<option value="false">Mêmes questions pour tous (tirées une fois)</option>
+						</select>
+					</div>
+				</div>
+			</div>
+
+			<div class="card">
+				<h2>3. Contenu</h2>
+				<p class="muted">
+					Choisissez les types de questions. La <strong>fréquence</strong> règle la proportion de chaque type dans le quiz
+					(ex. fréquence 3 et 1 : trois fois plus de questions du premier type).
+				</p>
+				<div class="table-scroll">
+					<table class="items">
+						<thead>
+							<tr>
+								<th>Chapitre</th>
+								<th>Type de question</th>
+								<th>Difficulté</th>
+								<th>Fréquence</th>
+								<th>Questions</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody id="items"></tbody>
+					</table>
+				</div>
+				<div class="actions" style="margin-top: 12px">
+					<button type="button" class="secondary" id="addItem">+ Ajouter un type de questions</button>
+					<span class="muted">ou</span>
+					<select id="chapterToAdd"></select>
+					<button type="button" class="secondary" id="addChapter">+ Ajouter tout le chapitre</button>
+				</div>
+			</div>
+
+			<div class="actions">
+				<button type="button" class="secondary" id="previewButton">Aperçu</button>
+				<button type="submit"><%= quizId === null ? "Créer le quiz" : "Enregistrer les modifications" %></button>
+				<a href="/admin/quiz">Annuler</a>
+			</div>
+		</form>
+
+		<div id="preview" class="card preview" hidden style="margin-top: 20px">
+			<h2>Aperçu <span class="muted">(exemple de tirage, bonne réponse en vert)</span></h2>
+			<ol id="previewList"></ol>
+		</div>
+	</main>
+
+	<script>
+		// Données envoyées par le serveur ; « < » est échappé pour ne pas fermer la balise script
+		const CATALOG = <%- JSON.stringify(catalog).replace(/</g, "\\u003c") %>;
+		const INITIAL = <%- JSON.stringify(config).replace(/</g, "\\u003c") %>;
+		const SAVE_URL = <%- JSON.stringify(quizId === null ? "/admin/quiz" : "/admin/quiz/" + quizId) %>;
+		const DIFFICULTIES = { 1: "Facile", 2: "Moyen", 3: "Difficile" };
+
+		const $ = (id) => document.getElementById(id);
+		const itemsBody = $("items");
+		const chapterById = Object.fromEntries(CATALOG.map((c) => [c.id, c]));
+
+		function option(value, label, selected) {
+			const o = document.createElement("option");
+			o.value = value;
+			o.textContent = label;
+			o.selected = selected;
+			return o;
+		}
+
+		function fillTypes(row, chapterId, typeId) {
+			const select = row.querySelector(".type");
+			select.replaceChildren(...chapterById[chapterId].types.map((t) => option(t.id, t.label, t.id === typeId)));
+			updateExample(row);
+		}
+
+		function updateExample(row) {
+			const chapter = chapterById[row.querySelector(".chapter").value];
+			const type = chapter.types.find((t) => t.id === row.querySelector(".type").value);
+			row.querySelector(".example").textContent = "Ex. : " + type.example;
+		}
+
+		function addRow(item = {}) {
+			const chapterId = item.chapter || CATALOG[0].id;
+			const row = document.createElement("tr");
+			row.innerHTML = `
+				<td><select class="chapter"></select></td>
+				<td><select class="type"></select><div class="example"></div></td>
+				<td><select class="difficulty"></select></td>
+				<td><input type="number" class="weight" min="1" max="10" value="1" /></td>
+				<td class="count"></td>
+				<td><button type="button" class="link remove" title="Retirer">✕</button></td>`;
+
+			row.querySelector(".chapter").replaceChildren(
+				...CATALOG.map((c) => option(c.id, `${c.title} — ${c.level}`, c.id === chapterId))
+			);
+			row.querySelector(".difficulty").replaceChildren(
+				...Object.entries(DIFFICULTIES).map(([v, l]) => option(v, l, Number(v) === (item.difficulty || 2)))
+			);
+			row.querySelector(".weight").value = item.weight || 1;
+			fillTypes(row, chapterId, item.type);
+
+			row.querySelector(".chapter").addEventListener("change", (e) => { fillTypes(row, e.target.value); updateCounts(); });
+			row.querySelector(".type").addEventListener("change", () => updateExample(row));
+			row.querySelector(".weight").addEventListener("input", updateCounts);
+			row.querySelector(".remove").addEventListener("click", () => { row.remove(); updateCounts(); });
+			itemsBody.appendChild(row);
+			updateCounts();
+		}
+
+		// Même répartition que le serveur (méthode du plus grand reste)
+		function updateCounts() {
+			const rows = [...itemsBody.children];
+			const weights = rows.map((r) => Math.max(0, Number(r.querySelector(".weight").value) || 0));
+			const sum = weights.reduce((a, b) => a + b, 0);
+			const total = Number($("questionCount").value) || 0;
+			const exact = weights.map((w) => (sum ? (w / sum) * total : 0));
+			const counts = exact.map(Math.floor);
+			let remaining = total - counts.reduce((a, b) => a + b, 0);
+			exact.map((x, i) => ({ i, rest: x - Math.floor(x) })).sort((a, b) => b.rest - a.rest)
+				.forEach(({ i }) => { if (remaining-- > 0) counts[i]++; });
+			rows.forEach((r, i) => { r.querySelector(".count").textContent = "≈ " + counts[i]; });
+		}
+
+		function readConfig() {
+			return {
+				title: $("title").value,
+				description: $("description").value,
+				questionCount: Number($("questionCount").value),
+				choiceCount: Number($("choiceCount").value),
+				trapMode: $("trapMode").value,
+				order: $("order").value,
+				regenerate: $("regenerate").value === "true",
+				items: [...itemsBody.children].map((r) => ({
+					chapter: r.querySelector(".chapter").value,
+					type: r.querySelector(".type").value,
+					difficulty: Number(r.querySelector(".difficulty").value),
+					weight: Number(r.querySelector(".weight").value)
+				}))
+			};
+		}
+
+		function showError(message) {
+			$("error").textContent = message;
+			$("error").hidden = !message;
+			if (message) window.scrollTo({ top: 0, behavior: "smooth" });
+		}
+
+		async function post(url, body) {
+			const response = await fetch(url, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify(body)
+			});
+			const data = await response.json();
+			if (!response.ok) throw new Error(data.error || "Erreur du serveur.");
+			return data;
+		}
+
+		$("previewButton").addEventListener("click", async () => {
+			try {
+				const config = readConfig();
+				if (!config.title.trim()) config.title = "Aperçu";
+				const { questions } = await post("/admin/quiz/apercu", config);
+				showError("");
+				$("previewList").replaceChildren(...questions.map((q) => {
+					const li = document.createElement("li");
+					const text = document.createElement("div");
+					text.textContent = q.text;
+					const ul = document.createElement("ul");
+					q.choices.forEach((c, i) => {
+						const choice = document.createElement("li");
+						choice.textContent = (i === q.answer ? "✔ " : "") + c;
+						if (i === q.answer) choice.className = "correct";
+						ul.appendChild(choice);
+					});
+					const meta = document.createElement("div");
+					meta.className = "muted";
+					const chapter = chapterById[q.chapter];
+					meta.textContent = `${chapter.types.find((t) => t.id === q.type).label} · ${DIFFICULTIES[q.difficulty]}`;
+					li.append(text, ul, meta);
+					return li;
+				}));
+				$("preview").hidden = false;
+				$("preview").scrollIntoView({ behavior: "smooth" });
+			} catch (error) {
+				showError(error.message);
+			}
+		});
+
+		$("builder").addEventListener("submit", async (event) => {
+			event.preventDefault();
+			try {
+				const { redirect } = await post(SAVE_URL, readConfig());
+				window.location.href = redirect;
+			} catch (error) {
+				showError(error.message);
+			}
+		});
+
+		$("addItem").addEventListener("click", () => {
+			const last = itemsBody.lastElementChild;
+			addRow(last ? { chapter: last.querySelector(".chapter").value } : {});
+		});
+
+		$("chapterToAdd").replaceChildren(...CATALOG.map((c) => option(c.id, c.title, false)));
+		$("addChapter").addEventListener("click", () => {
+			const chapter = chapterById[$("chapterToAdd").value];
+			chapter.types.forEach((t) => addRow({ chapter: chapter.id, type: t.id }));
+		});
+
+		$("questionCount").addEventListener("input", updateCounts);
+
+		// Formulaire pré-rempli pour une modification, sinon une première ligne vide
+		if (INITIAL) {
+			$("title").value = INITIAL.title;
+			$("description").value = INITIAL.description || "";
+			$("questionCount").value = INITIAL.questionCount;
+			$("choiceCount").value = INITIAL.choiceCount;
+			$("trapMode").value = INITIAL.trapMode;
+			$("order").value = INITIAL.order;
+			$("regenerate").value = String(INITIAL.regenerate);
+			INITIAL.items.forEach(addRow);
+		} else {
+			addRow();
+		}
+	</script>
+</body>
+
+</html>

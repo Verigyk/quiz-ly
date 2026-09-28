@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <%- include("partials/head", { title: heading }) %>
+</head>
+
+<body>
+    <%- include("partials/sky") %>
+
+    <div class="page narrow">
+        <header class="topbar">
+            <a class="brand" href="<%= backLink.href %>"><span class="glyph">✦</span> <%= siteName %></a>
+            <a class="btn ghost small" href="<%= backLink.href %>">← <%= backLink.label %></a>
+        </header>
+
+        <h1 class="title reveal"><%= heading %></h1>
+        <p class="subtitle reveal">Tous tes quiz, avec la correction de chaque question.</p>
+
+        <% if (history.length === 0) { %>
+            <div class="card reveal">Aucun quiz pour l'instant. Lance-toi depuis l'accueil !</div>
+        <% } else { %>
+            <div class="history-list">
+                <% history.forEach((entry) => { const pct = entry.total ? Math.round(100 * entry.score / entry.total) : 0; %>
+                    <a class="card entry reveal" href="<%= basePath %>/<%= entry.id %>" style="text-decoration: none; color: inherit">
+                        <div>
+                            <h3><%= entry.title %></h3>
+                            <div class="muted small"><%= entry.completed_at.toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" }) %></div>
+                        </div>
+                        <div class="chips">
+                            <% if (!entry.completed) { %>
+                                <span class="tag warn">abandonné après <%= entry.answered %> question<%= entry.answered > 1 ? "s" : "" %></span>
+                            <% } %>
+                            <div class="meter" title="<%= pct %> %"><span style="width: <%= pct %>%"></span></div>
+                            <strong><%= entry.score %> / <%= entry.total %></strong>
+                            <% if (entry.points > 0) { %><span class="tag">+<%= entry.points %> 🪙</span><% } %>
+                        </div>
+                    </a>
+                <% }) %>
+            </div>
+        <% } %>
+    </div>
+    <%- include("partials/companion", { context: "historique" }) %>
+</body>
+
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <%- include("partials/head", { title: question.title }) %>
+</head>
+
+<body>
+    <%- include("partials/sky") %>
+
+    <% if (feedback) { %>
+        <div class="toast <%= feedback.correct ? 'good' : 'bad' %>" role="status" data-correct="<%= feedback.correct %>">
+            <span class="big"><%= feedback.correct ? "✅" : "❌" %></span>
+            <div>
+                <% if (feedback.correct) { %>
+                    <span data-random="<%= JSON.stringify(['Bonne réponse !', 'Bravo !', 'Exact !', 'Parfait, c\u2019est ça !', 'Bien joué !']) %>">Sort réussi !</span>
+                    <% if (feedback.streak >= 3) { %><div class="detail">🔥 <%= feedback.streak %> bonnes réponses d'affilée, continue !</div><% } %>
+                <% } else { %>
+                    <span data-random="<%= JSON.stringify(['Pas tout à fait…', 'Raté, mais ça arrive !', 'Attention au piège !', 'Pas cette fois…']) %>">Le sort a ricoché…</span>
+                    <div class="detail">La bonne réponse était : <strong><%= feedback.answer %></strong></div>
+                <% } %>
+            </div>
+        </div>
+    <% } %>
+
+    <div class="page narrow">
+        <div class="quiz-head">
+            <a class="brand" href="/accueil"><span class="glyph">✦</span> <%= question.title %></a>
+            <% if (question.streak >= 2) { %>
+                <div class="streak"><span class="flame">🔥</span> <%= question.streak %> d'affilée</div>
+            <% } %>
+        </div>
+
+        <div class="path" aria-label="Progression">
+            <% for (let i = 0; i < question.total; i++) { %>
+                <span class="dot <%= i < question.marks.length ? (question.marks[i] ? 'good' : 'bad') : (i === question.number - 1 ? 'current' : '') %>"></span>
+            <% } %>
+        </div>
+
+        <form method="POST" action="submitAnswer" id="quizForm" style="margin-top: 22px">
+            <section class="card question-card reveal">
+                <div class="number">Question <%= question.number %> / <%= question.total %></div>
+                <h2><%= question.text %></h2>
+            </section>
+
+            <div class="choices">
+                <% question.choices.forEach((choice, i) => { %>
+                    <div class="reveal">
+                        <input type="radio" name="reponse" value="<%= i %>" id="choice<%= i %>" required />
+                        <label class="choice" for="choice<%= i %>">
+                            <span class="letter"><%= "ABCDEF"[i] %></span>
+                            <span><%= choice %></span>
+                        </label>
+                    </div>
+                <% }) %>
+            </div>
+
+            <div class="quiz-actions reveal">
+                <a href="/accueil" class="muted small">← Retour à l'accueil (tu pourras reprendre)</a>
+                <button type="submit" class="btn gold big">Valider</button>
+            </div>
+            <p class="muted small" style="text-align: center; margin-top: 18px">Astuce : touches 1 à <%= question.choices.length %> pour choisir, Entrée pour valider.</p>
+        </form>
+    </div>
+
+    <script>
+        const form = document.getElementById("quizForm");
+        const radios = [...form.querySelectorAll('input[name="reponse"]')];
+
+        // Clavier : 1..6 ou A..F pour choisir, Entrée pour valider
+        document.addEventListener("keydown", (e) => {
+            const index = "123456".indexOf(e.key) !== -1 ? "123456".indexOf(e.key) : "abcdef".indexOf(e.key.toLowerCase());
+            if (index >= 0 && radios[index] && e.key.length === 1) {
+                radios[index].checked = true;
+                radios[index].focus();
+                const rect = radios[index].nextElementSibling.getBoundingClientRect();
+                window.arcanesBurst?.(rect.left + 30, rect.top + rect.height / 2, 10, 50);
+            }
+        });
+
+        radios.forEach((r) => r.addEventListener("change", () => {
+            const rect = r.nextElementSibling.getBoundingClientRect();
+            window.arcanesBurst?.(rect.left + 30, rect.top + rect.height / 2, 10, 50);
+        }));
+
+        // Petite animation avant l'envoi
+        form.addEventListener("submit", (e) => {
+            if (form.dataset.sent) return;
+            e.preventDefault();
+            form.dataset.sent = "1";
+            form.classList.add("casting");
+            const checked = form.querySelector("input:checked + .choice");
+            if (checked) {
+                const rect = checked.getBoundingClientRect();
+                window.arcanesBurst?.(rect.left + rect.width / 2, rect.top + rect.height / 2, 14, 70);
+            }
+            setTimeout(() => form.submit(), matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 450);
+        });
+
+        // Bonne réponse précédente : petite gerbe d'étincelles
+        const toast = document.querySelector(".toast[data-correct='true']");
+        if (toast) setTimeout(() => window.arcanesBurst?.(innerWidth / 2, 50, 16, 90), 200);
+    </script>
+    <%- include("partials/companion", { context: "quiz", event: feedback }) %>
+</body>
+
+</html>
