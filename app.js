@@ -38,7 +38,7 @@ app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "ejs");
 
 // Nom du site affiché sur toutes les pages
-app.locals.siteName = "Maths en quiz";
+app.locals.siteName = "Quiz-Ly";
 
 // Durées proposées pour les codes d'association, utilisables dans les vues
 app.locals.linkDurations = require("./linkDurations");
