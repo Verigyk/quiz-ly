@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title><%= templateId === null ? "Nouveau modèle" : "Modifier le modèle" %></title>
+	<link rel="stylesheet" href="/admin.css" />
+	<style>
+		.vars td { padding: 4px; }
+		.vars input[type="number"] { width: 80px; }
+		.vars input.vname { width: 70px; }
+		.help code, .help kbd { background: rgba(255, 255, 255, 0.08); padding: 1px 5px; border-radius: 4px; }
+		.help ul { margin: 6px 0; padding-left: 20px; }
+		.samples li { margin-bottom: 10px; }
+		.samples .ok { color: var(--ok); font-weight: 700; }
+		.samples .trap { color: #ffb3bb; }
+		textarea.mono, input.mono { font-family: ui-monospace, Consolas, monospace; }
+	</style>
+</head>
+
+<body>
+	<%- include("nav", { active: "modeles" }) %>
+
+	<main>
+		<h1><%= templateId === null ? "Nouveau modèle de question" : "Modifier le modèle" %></h1>
+
+		<div id="error" class="flash error" hidden></div>
+
+		<details class="card help">
+			<summary><strong>Comment ça marche ?</strong> (cliquez pour afficher l'aide)</summary>
+			<ol>
+				<li><strong>Variables</strong> : chaque variable est tirée au hasard à chaque question.
+					<ul>
+						<li><em>Entier</em> : un nombre entier entre le minimum et le maximum (cochez « sans 0 » pour exclure zéro).</li>
+						<li><em>Liste</em> : une valeur prise au hasard dans une liste séparée par des <code>;</code> (nombres ou mots).</li>
+					</ul>
+				</li>
+				<li><strong>Condition</strong> (facultatif) : les tirages qui ne la respectent pas sont refaits.
+					Ex. : <code>a != b</code>, <code>pgcd(a, b) = 1 et c > 0</code>.</li>
+				<li><strong>Énoncé, bonne réponse, pièges</strong> : écrivez le texte, et mettez les calculs entre accolades.
+					<code>Développer (x + {a})²</code> → « Développer (x + 3)² ». <code>{2*a}</code> → 6, <code>{a*a}</code> → 9.</li>
+				<li><strong>Pièges</strong> : une mauvaise réponse par ligne, écrite comme la bonne (ex. l'oubli du double produit : <code>x² + {a*a}</code>).
+					S'il manque des mauvaises réponses, le site en fabrique avec d'autres tirages.</li>
+			</ol>
+			<p><strong>Calculs</strong> : <code>+ - * / ^ %</code> et parenthèses. <strong>Fonctions</strong> :</p>
+			<ul>
+				<li><code>pgcd(a, b)</code>, <code>ppcm(a, b)</code>, <code>abs(x)</code>, <code>min(…)</code>, <code>max(…)</code>, <code>arrondi(x, 2)</code>, <code>racine(x)</code></li>
+				<li><code>frac(n, d)</code> : fraction simplifiée (<code>frac(6, 8)</code> → 3/4)</li>
+				<li><code>polynome(a, b, c)</code> : ax² + bx + c bien écrit (<code>polynome(1, -4, 0)</code> → x² - 4x)</li>
+				<li><code>signe(b)</code> : « + 3 » ou « - 3 » ; <code>par(b)</code> : ajoute des parenthèses si négatif (« (-3) »)</li>
+				<li><code>rac(n)</code> : racine simplifiée (<code>rac(72)</code> → 6√2)</li>
+			</ul>
+			<p class="muted">Avec « Nettoyer l'écriture », <code>+ -3</code> devient <code>- 3</code> et <code>1x</code> devient <code>x</code>.</p>
+		</details>
+
+		<form id="templateForm">
+			<div class="card">
+				<div class="grid">
+					<div>
+						<label for="name">Nom du modèle</label>
+						<input type="text" id="name" maxlength="80" required placeholder="Ex. : Carré d'une somme" />
+					</div>
+					<div>
+						<label for="category">Catégorie</label>
+						<select id="category">
+							<% categories.forEach((c) => { %>
+								<option value="<%= c.id %>" <%= c.id === saved.category_id ? "selected" : "" %>><%= c.name %></option>
+							<% }) %>
+						</select>
+					</div>
+					<div>
+						<label for="example">Partir d'un exemple</label>
+						<select id="example">
+							<option value="">— Choisir —</option>
+							<option value="carre">Développer (x + a)²</option>
+							<option value="facto">Factoriser a²x² − b²</option>
+							<option value="equation">Résoudre ax + b = c</option>
+							<option value="fraction">Additionner deux fractions</option>
+							<option value="liste">Question avec une liste de mots</option>
+						</select>
+					</div>
+				</div>
+			</div>
+
+			<div class="card">
+				<h2>1. Variables tirées au hasard</h2>
+				<table class="vars">
+					<thead><tr><th>Nom</th><th>Type</th><th>Min</th><th>Max</th><th>Sans 0</th><th>Valeurs (liste)</th><th></th></tr></thead>
+					<tbody id="vars"></tbody>
+				</table>
+				<button type="button" class="secondary" id="addVar" style="margin-top: 8px">+ Ajouter une variable</button>
+				<div class="field" style="margin-top: 14px">
+					<label for="condition">Condition sur les variables (facultatif)</label>
+					<input type="text" id="condition" class="mono" maxlength="300" placeholder="Ex. : pgcd(a, b) = 1 et a != b" style="width: 100%" />
+				</div>
+			</div>
+
+			<div class="card">
+				<h2>2. Question et réponses</h2>
+				<div class="field">
+					<label for="question">Énoncé</label>
+					<textarea id="question" class="mono" maxlength="500" required placeholder="Ex. : Développer (x + {a})²"></textarea>
+				</div>
+				<div class="field">
+					<label for="answer">Bonne réponse</label>
+					<input type="text" id="answer" class="mono" maxlength="200" required placeholder="Ex. : x² + {2*a}x + {a*a}" style="width: 100%" />
+				</div>
+				<div class="field">
+					<label for="traps">Pièges : mauvaises réponses typiques (une par ligne)</label>
+					<textarea id="traps" class="mono" rows="4" placeholder="Ex. :&#10;x² + {a*a}&#10;x² + {a}x + {a*a}"></textarea>
+				</div>
+				<label><input type="checkbox" id="tidy" checked /> Nettoyer l'écriture (+ -3 → - 3, 1x → x)</label>
+			</div>
+
+			<div class="actions">
+				<button type="button" class="secondary" id="testButton">Tester</button>
+				<button type="submit">Enregistrer le modèle</button>
+				<a href="/admin/modeles">Annuler</a>
+			</div>
+		</form>
+
+		<div id="preview" class="card samples" hidden style="margin-top: 20px">
+			<h2>Exemples de tirages</h2>
+			<ol id="sampleList"></ol>
+		</div>
+	</main>
+
+	<script>
+		const INITIAL = <%- JSON.stringify(saved.definition).replace(/</g, "\\u003c") %>;
+		const SAVE_URL = <%- JSON.stringify(templateId === null ? "/admin/modeles" : "/admin/modeles/" + templateId) %>;
+		const $ = (id) => document.getElementById(id);
+
+		const EXAMPLES = {
+			carre: {
+				name: "Carré d'une somme", condition: "",
+				variables: [{ name: "a", kind: "entier", min: -9, max: 9, nonZero: true }],
+				question: "Développer (x + {a})²",
+				answer: "x² + {2*a}x + {a*a}",
+				traps: ["x² + {a*a}", "x² + {a}x + {a*a}", "x² + {2*a}x + {2*a}", "x² - {2*a}x + {a*a}"]
+			},
+			facto: {
+				name: "Factoriser a²x² − b²", condition: "pgcd(a, b) = 1",
+				variables: [{ name: "a", kind: "entier", min: 1, max: 6 }, { name: "b", kind: "entier", min: 1, max: 9 }],
+				question: "Factoriser : {polynome(a*a, 0, -b*b)}",
+				answer: "({a}x - {b})({a}x + {b})",
+				traps: ["({a}x - {b})²", "({a}x + {b})²", "({a*a}x - {b})({a*a}x + {b})", "({a}x - {b*b})({a}x + {b*b})"]
+			},
+			equation: {
+				name: "Équation ax + b = c", condition: "",
+				variables: [{ name: "a", kind: "entier", min: 2, max: 9 }, { name: "s", kind: "entier", min: -10, max: 10 }, { name: "b", kind: "entier", min: -15, max: 15, nonZero: true }],
+				question: "Résoudre : {a}x + {b} = {a*s + b}",
+				answer: "x = {s}",
+				traps: ["x = {frac(a*s + 2*b, a)}", "x = {frac(a*s, -a)}", "x = {a*s}"]
+			},
+			fraction: {
+				name: "Somme de deux fractions", condition: "b != d",
+				variables: [{ name: "a", kind: "entier", min: 1, max: 9 }, { name: "b", kind: "entier", min: 2, max: 9 }, { name: "c", kind: "entier", min: 1, max: 9 }, { name: "d", kind: "entier", min: 2, max: 9 }],
+				question: "Calculer {a}/{b} + {c}/{d}",
+				answer: "{frac(a*d + b*c, b*d)}",
+				traps: ["{frac(a + c, b + d)}", "{frac(a + c, b*d)}", "{frac(a*c, b*d)}"]
+			},
+			liste: {
+				name: "Vocabulaire des fonctions", condition: "",
+				variables: [{ name: "f", kind: "liste", values: "affine; linéaire; constante" }],
+				question: "Une fonction {f} a une représentation graphique qui est :",
+				answer: "une droite",
+				traps: ["une parabole", "un cercle", "une courbe en U"]
+			}
+		};
+
+		function option(value, label, selected) {
+			const o = document.createElement("option");
+			o.value = value; o.textContent = label; o.selected = selected;
+			return o;
+		}
+
+		function addVar(v = { name: "", kind: "entier", min: 1, max: 9, nonZero: false, values: "" }) {
+			const row = document.createElement("tr");
+			row.innerHTML = `
+				<td><input class="vname mono" maxlength="16" placeholder="a" /></td>
+				<td><select class="kind"></select></td>
+				<td><input type="number" class="min" /></td>
+				<td><input type="number" class="max" /></td>
+				<td><input type="checkbox" class="nonzero" /></td>
+				<td><input class="values mono" placeholder="2; 3; 5" /></td>
+				<td><button type="button" class="link" title="Retirer">✕</button></td>`;
+			row.querySelector(".vname").value = v.name;
+			row.querySelector(".kind").replaceChildren(option("entier", "Entier", v.kind !== "liste"), option("liste", "Liste", v.kind === "liste"));
+			row.querySelector(".min").value = v.min ?? 1;
+			row.querySelector(".max").value = v.max ?? 9;
+			row.querySelector(".nonzero").checked = Boolean(v.nonZero);
+			row.querySelector(".values").value = v.valuesText ?? (Array.isArray(v.values) ? v.values.join("; ") : v.values || "");
+			const refresh = () => {
+				const list = row.querySelector(".kind").value === "liste";
+				row.querySelectorAll(".min, .max, .nonzero").forEach((el) => { el.disabled = list; });
+				row.querySelector(".values").disabled = !list;
+			};
+			row.querySelector(".kind").addEventListener("change", refresh);
+			row.querySelector("button").addEventListener("click", () => row.remove());
+			refresh();
+			$("vars").appendChild(row);
+		}
+
+		function load(t) {
+			$("name").value = t.name || "";
+			$("condition").value = t.condition || "";
+			$("question").value = t.question || "";
+			$("answer").value = t.answer || "";
+			$("traps").value = (t.traps || []).join("\n");
+			$("tidy").checked = t.tidy !== false;
+			$("vars").replaceChildren();
+			(t.variables || []).forEach(addVar);
+		}
+
+		function read() {
+			return {
+				categoryId: Number($("category").value),
+				name: $("name").value,
+				condition: $("condition").value,
+				question: $("question").value,
+				answer: $("answer").value,
+				traps: $("traps").value.split("\n"),
+				tidy: $("tidy").checked,
+				variables: [...$("vars").children].map((r) => ({
+					name: r.querySelector(".vname").value,
+					kind: r.querySelector(".kind").value,
+					min: Number(r.querySelector(".min").value),
+					max: Number(r.querySelector(".max").value),
+					nonZero: r.querySelector(".nonzero").checked,
+					values: r.querySelector(".values").value
+				}))
+			};
+		}
+
+		function showError(message) {
+			$("error").textContent = message;
+			$("error").hidden = !message;
+			if (message) window.scrollTo({ top: 0, behavior: "smooth" });
+		}
+
+		async function post(url, body) {
+			const response = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+			const data = await response.json();
+			if (!response.ok) throw new Error(data.error || "Erreur du serveur.");
+			return data;
+		}
+
+		$("testButton").addEventListener("click", async () => {
+			try {
+				const body = read();
+				if (!body.name.trim()) body.name = "Test";
+				const { samples } = await post("/admin/modeles/apercu", body);
+				showError("");
+				$("sampleList").replaceChildren(...samples.map((s) => {
+					const li = document.createElement("li");
+					const q = document.createElement("div"); q.textContent = s.text;
+					const ok = document.createElement("div"); ok.className = "ok"; ok.textContent = "✔ " + s.answer;
+					li.append(q, ok);
+					s.traps.forEach((t) => { const d = document.createElement("div"); d.className = "trap"; d.textContent = "✘ " + t; li.append(d); });
+					return li;
+				}));
+				$("preview").hidden = false;
+				$("preview").scrollIntoView({ behavior: "smooth" });
+			} catch (error) {
+				showError(error.message);
+			}
+		});
+
+		$("templateForm").addEventListener("submit", async (e) => {
+			e.preventDefault();
+			try {
+				const { redirect } = await post(SAVE_URL, read());
+				window.location.href = redirect;
+			} catch (error) {
+				showError(error.message);
+			}
+		});
+
+		$("addVar").addEventListener("click", () => addVar());
+		$("example").addEventListener("change", (e) => {
+			if (e.target.value && (!$("question").value || confirm("Remplacer le contenu actuel par cet exemple ?"))) {
+				load(EXAMPLES[e.target.value]);
+			}
+			e.target.value = "";
+		});
+
+		if (INITIAL) load(INITIAL); else addVar({ name: "a", kind: "entier", min: 1, max: 9 });
+	</script>
+</body>
+
+</html>

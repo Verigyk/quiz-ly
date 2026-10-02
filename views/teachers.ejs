@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<%- include("partials/head", { title: "Mes professeurs" }) %>
+</head>
+
+<body>
+	<%- include("partials/sky") %>
+
+	<div class="page narrow">
+		<%- include("partials/topbar", { isAdmin }) %>
+
+		<h1 class="title reveal">Mes professeurs</h1>
+		<p class="subtitle reveal">Chacun de tes professeurs peut te proposer des quiz et suivre tes progrès.</p>
+
+		<% if (flash) { %>
+			<div class="notice <%= flash.type === 'error' ? 'error' : '' %> reveal" <%= flash.type === "success" ? 'style="background: rgba(82, 242, 176, 0.12); border: 1px solid rgba(82, 242, 176, 0.4)"' : "" %>>
+				<%= flash.text %>
+			</div>
+		<% } %>
+
+		<section class="card reveal" style="margin-bottom: 20px">
+			<h2 style="margin-top: 0">Rejoindre un professeur</h2>
+			<p class="muted">Entre le code que ton professeur t'a donné.</p>
+			<form method="POST" action="/accueil/professeurs" class="chips">
+				<input class="input" type="text" name="code" placeholder="Ex. : K7PX-3QMA" required maxlength="12" autocomplete="off"
+					style="width: auto; flex: 1; min-width: 180px; text-transform: uppercase; letter-spacing: 0.1em" />
+				<button type="submit" class="btn">Rejoindre</button>
+			</form>
+		</section>
+
+		<section class="card reveal" style="margin-bottom: 20px">
+			<h2 style="margin-top: 0">Code pour qu'un professeur t'ajoute</h2>
+			<p class="muted">Un professeur peut aussi t'ajouter lui-même : génère un code et donne-le-lui. Il ne sert qu'une fois.</p>
+			<div class="chips">
+				<% if (code) { %>
+					<strong style="font-size: 1.8rem; letter-spacing: 0.15em; color: var(--gold)"><%= code.code %></strong>
+					<span class="muted small"><%= linkDurations.describe(code.expiresAt) %></span>
+				<% } %>
+			</div>
+			<div>
+				<%- include("partials/codeForm", { action: "/accueil/code/nouveau", hasCode: Boolean(code), buttonClass: code ? "btn ghost small" : "btn", selectClass: "input" }) %>
+			</div>
+		</section>
+
+		<section class="card reveal">
+			<h2 style="margin-top: 0"><%= teachers.length === 0 ? "Aucun professeur pour l'instant" : teachers.length + " professeur" + (teachers.length > 1 ? "s" : "") %></h2>
+			<% if (teachers.length === 0) { %>
+				<p class="muted">Rejoins ton professeur avec son code pour voir ses quiz.</p>
+			<% } %>
+			<div class="history-list">
+				<% teachers.forEach((t) => { %>
+					<div class="entry" style="padding: 10px 0; border-bottom: 1px solid var(--glass-border)">
+						<strong>👩‍🏫 <%= t %></strong>
+						<form method="POST" action="/accueil/professeurs/<%= encodeURIComponent(t) %>/quitter"
+							onsubmit="return confirm('Quitter ce professeur ? Tu ne verras plus ses quiz.')">
+							<button type="submit" class="btn ghost small">Quitter</button>
+						</form>
+					</div>
+				<% }) %>
+			</div>
+		</section>
+	</div>
+
+	<%- include("partials/companion", { context: "accueil" }) %>
+</body>
+
+</html>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<%- include("partials/head", { title: "La plage" }) %>
+	<style>
+		.beach-page { display: flex; flex-direction: column; height: 100vh; }
+		.beach-page .topbar { margin: 0; padding: 14px 20px; }
+		.beach-wrap { position: relative; flex: 1; min-height: 360px; margin: 0 12px 12px; border-radius: 18px; overflow: hidden; border: 1px solid var(--glass-border); }
+		#beach { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+		#beach:active { cursor: grabbing; }
+		.beach-hud { position: absolute; left: 12px; top: 12px; max-width: 320px; padding: 12px 14px; border-radius: 14px; background: rgba(12, 8, 40, 0.72); backdrop-filter: blur(8px); font-size: 0.9rem; }
+		.beach-hud h1 { font-size: 1.2rem; margin: 0 0 4px; }
+		#beach-info { position: absolute; right: 12px; bottom: 12px; min-width: 220px; padding: 12px 14px; border-radius: 14px; background: rgba(255, 255, 255, 0.95); color: #241a4f; font-size: 0.92rem; line-height: 1.5; }
+		#beach-info strong { display: block; color: #6a4be0; font-size: 1rem; }
+		.beach-empty { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 20px; }
+		@media (max-width: 640px) { .beach-hud { right: 12px; max-width: none; } .beach-hud p { display: none; } }
+	</style>
+</head>
+
+<body>
+	<div class="beach-page">
+		<%- include("partials/topbar", { isAdmin }) %>
+
+		<div class="beach-wrap">
+			<canvas id="beach" aria-label="La plage : les compagnons construisent leurs structures de sable"></canvas>
+
+			<div class="beach-hud">
+				<h1>🏖️ La plage</h1>
+				<p class="muted small" style="margin: 0">
+					<%= isAdmin ? "Les compagnons de vos élèves" : "Ton compagnon et ceux des élèves de tes professeurs" %> vivent ici.
+					Chacun construit sa structure de sable, qui grandit avec les quiz terminés.
+					Glisse pour te déplacer, zoome avec la molette, clique sur un personnage.
+				</p>
+			</div>
+
+			<div id="beach-info" hidden></div>
+
+			<% if (characters.length === 0) { %>
+				<div class="beach-empty"><div class="card">Personne sur la plage pour l'instant.<br /><span class="muted small">Les compagnons apparaissent quand vous avez des élèves.</span></div></div>
+			<% } %>
+		</div>
+	</div>
+
+	<script id="beach-data" type="application/json"><%- JSON.stringify({ characters }).replace(/</g, "\\u003c") %></script>
+	<script src="/beach.js" defer></script>
+</body>
+
+</html>

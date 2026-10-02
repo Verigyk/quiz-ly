@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Mes modèles de questions</title>
+	<link rel="stylesheet" href="/admin.css" />
+</head>
+
+<body>
+	<%- include("nav", { active: "modeles" }) %>
+
+	<main>
+		<h1>Mes modèles de questions</h1>
+		<p class="muted">
+			Un modèle est une question avec des nombres tirés au hasard, par exemple « Développer (x + {a})² ».
+			Rangez vos modèles dans vos catégories : elles apparaissent ensuite dans la création de quiz, comme les chapitres intégrés.
+		</p>
+
+		<% if (flash) { %>
+			<div class="flash <%= flash.type %>"><%= flash.text %></div>
+		<% } %>
+
+		<div class="card">
+			<h2>Nouvelle catégorie</h2>
+			<form method="POST" action="/admin/categories" class="actions">
+				<input type="text" name="name" placeholder="Ex. : Identités remarquables (3e)" required maxlength="60" />
+				<button type="submit">Créer</button>
+			</form>
+		</div>
+
+		<% if (categories.length === 0) { %>
+			<div class="card"><p class="muted">Aucune catégorie pour l'instant : créez-en une pour y ranger vos modèles.</p></div>
+		<% } %>
+
+		<% categories.forEach((c) => { %>
+			<div class="card">
+				<div class="actions" style="justify-content: space-between">
+					<form method="POST" action="/admin/categories/<%= c.id %>/renommer" class="actions">
+						<input type="text" name="name" value="<%= c.name %>" required maxlength="60" style="font-weight: 800; font-size: 1.05rem" />
+						<button type="submit" class="secondary">Renommer</button>
+					</form>
+					<span class="actions">
+						<a class="button" href="/admin/modeles/nouveau?categorie=<%= c.id %>">+ Nouveau modèle</a>
+						<form method="POST" action="/admin/categories/<%= c.id %>/supprimer" class="inline"
+							onsubmit="return confirm('Supprimer cette catégorie et ses <%= c.templates.length %> modèle(s) ?')">
+							<button type="submit" class="danger">Supprimer</button>
+						</form>
+					</span>
+				</div>
+				<% if (c.templates.length === 0) { %>
+					<p class="muted">Aucun modèle dans cette catégorie.</p>
+				<% } else { %>
+					<table style="margin-top: 10px">
+						<tr><th>Modèle</th><th>Énoncé</th><th>Variables</th><th></th></tr>
+						<% c.templates.forEach((t) => { const d = t.definition; %>
+							<tr>
+								<td><strong><%= d.name %></strong></td>
+								<td class="muted"><%= d.question %></td>
+								<td class="muted"><%= d.variables.map((v) => v.name).join(", ") || "—" %></td>
+								<td class="actions">
+									<a href="/admin/modeles/<%= t.id %>">Modifier</a>
+									<form method="POST" action="/admin/modeles/<%= t.id %>/supprimer" class="inline"
+										onsubmit="return confirm('Supprimer ce modèle ?')">
+										<button type="submit" class="danger">Supprimer</button>
+									</form>
+								</td>
+							</tr>
+						<% }) %>
+					</table>
+				<% } %>
+			</div>
+		<% }) %>
+	</main>
+</body>
+
+</html>

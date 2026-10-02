@@ -1,0 +1,22 @@
+<%
+	// Formulaire « Générer un code » avec choix de la durée. Paramètres : action (URL), hasCode, buttonClass
+	const uid = "d" + Math.random().toString(36).slice(2, 7);
+	const range = linkDurations.dateRange();
+%>
+<form method="POST" action="<%= action %>" class="code-form" style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px"
+	<%- hasCode ? "onsubmit=\"return confirm('Créer un nouveau code ? Le code actuel ne fonctionnera plus.')\"" : "" %>>
+	<label for="<%= uid %>">Valable</label>
+	<select name="duration" id="<%= uid %>" class="<%= typeof selectClass !== 'undefined' ? selectClass : '' %>"
+		onchange="const d = this.form.querySelector('.custom-duration'); d.hidden = this.value !== 'perso'; d.querySelector('input').required = !d.hidden">
+		<% linkDurations.CHOICES.forEach((c) => { %>
+			<option value="<%= c.id %>" <%= c.id === linkDurations.DEFAULT ? "selected" : "" %>><%= c.label %></option>
+		<% }) %>
+	</select>
+	<span class="custom-duration" hidden>
+		<!-- Valable jusqu'à la fin de ce jour-là, entre aujourd'hui et dans un an -->
+		<input type="date" name="date" min="<%= range.min %>" max="<%= range.max %>" value="<%= range.min %>"
+			class="<%= typeof selectClass !== 'undefined' ? selectClass : '' %>" style="width: auto" aria-label="Date d'expiration" />
+		<span class="muted small">(inclus)</span>
+	</span>
+	<button type="submit" class="<%= buttonClass %>"><%= hasCode ? "Générer un nouveau code" : "Générer un code" %></button>
+</form>

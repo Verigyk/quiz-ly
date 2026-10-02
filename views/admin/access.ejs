@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Élèves du quiz</title>
+	<link rel="stylesheet" href="/admin.css" />
+</head>
+
+<body>
+	<%- include("nav", { active: "quiz" }) %>
+
+	<main>
+		<h1>Élèves qui ont accès : <%= quiz.title %></h1>
+		<p class="muted">Seuls vous et les élèves cochés voient ce quiz. Les autres professeurs ne le voient pas.</p>
+
+		<% const extra = quiz.students.filter((u) => !myStudents.includes(u)); %>
+		<form method="POST" action="/admin/quiz/<%= quiz.id %>/acces" class="card">
+			<% if (myStudents.length === 0 && extra.length === 0) { %>
+				<p class="muted">Vous n'avez pas encore d'élèves : <a href="/admin">créez leurs comptes</a>, puis revenez les cocher.</p>
+			<% } else { %>
+				<div class="actions" style="margin-bottom: 10px">
+					<button type="button" class="secondary" onclick="document.querySelectorAll('.access-student').forEach((c) => c.checked = true)">Tout cocher</button>
+					<button type="button" class="secondary" onclick="document.querySelectorAll('.access-student').forEach((c) => c.checked = false)">Tout décocher</button>
+				</div>
+				<div class="grid">
+					<% myStudents.forEach((u) => { %>
+						<label><input type="checkbox" class="access-student" name="students" value="<%= u %>" <%= quiz.students.includes(u) ? "checked" : "" %> /> <%= u %></label>
+					<% }) %>
+					<% extra.forEach((u) => { %>
+						<label><input type="checkbox" class="access-student" name="students" value="<%= u %>" checked /> <%= u %> <span class="muted">(élève d'un autre professeur)</span></label>
+					<% }) %>
+				</div>
+			<% } %>
+			<div class="actions" style="margin-top: 16px">
+				<button type="submit">Enregistrer</button>
+				<a href="/admin/quiz">Annuler</a>
+			</div>
+		</form>
+	</main>
+</body>
+
+</html>

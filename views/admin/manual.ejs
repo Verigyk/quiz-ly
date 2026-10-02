@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title><%= quizId === null ? "Nouveau quiz écrit à la main" : "Modifier le quiz" %></title>
+	<link rel="stylesheet" href="/admin.css" />
+	<style>
+		.question-block { border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+		.question-block .head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+		.question-block textarea { min-height: 50px; margin: 8px 0; }
+		.choice-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+		.choice-row input[type="text"] { flex: 1; }
+		.choice-row.correct input[type="text"] { border-color: var(--ok); }
+	</style>
+</head>
+
+<body>
+	<%- include("nav", { active: "quiz" }) %>
+
+	<main>
+		<h1><%= quizId === null ? "Nouveau quiz écrit à la main" : "Modifier le quiz" %></h1>
+		<p class="muted">Écrivez vos questions et leurs réponses, puis cochez la bonne réponse de chaque question (2 à 6 réponses).</p>
+
+		<div id="error" class="flash error" hidden></div>
+
+		<form id="manualForm">
+			<div class="card">
+				<div class="field">
+					<label for="title">Titre</label>
+					<input type="text" id="title" maxlength="100" required placeholder="Ex. : Vocabulaire de géométrie" />
+				</div>
+				<div class="field">
+					<label for="description">Consigne pour les élèves (facultatif)</label>
+					<textarea id="description" maxlength="500"></textarea>
+				</div>
+			</div>
+
+			<div class="card">
+				<h2>Questions</h2>
+				<div id="questions"></div>
+				<button type="button" class="secondary" id="addQuestion">+ Ajouter une question</button>
+			</div>
+
+			<div class="card">
+				<h2>Élèves qui ont accès</h2>
+				<p class="muted">Seuls vous et les élèves cochés voient ce quiz.</p>
+				<% const extra = quiz.students.filter((u) => !myStudents.includes(u)); %>
+				<% if (myStudents.length === 0 && extra.length === 0) { %>
+					<p class="muted">Vous n'avez pas encore d'élèves : <a href="/admin">créez leurs comptes</a>, puis revenez les cocher.</p>
+				<% } else { %>
+					<div class="actions" style="margin-bottom: 10px">
+						<button type="button" class="secondary" onclick="document.querySelectorAll('.access-student').forEach((c) => c.checked = true)">Tout cocher</button>
+						<button type="button" class="secondary" onclick="document.querySelectorAll('.access-student').forEach((c) => c.checked = false)">Tout décocher</button>
+					</div>
+					<div class="grid">
+						<% myStudents.forEach((u) => { %>
+							<label><input type="checkbox" class="access-student" value="<%= u %>" <%= quiz.students.includes(u) ? "checked" : "" %> /> <%= u %></label>
+						<% }) %>
+						<% extra.forEach((u) => { %>
+							<label><input type="checkbox" class="access-student" value="<%= u %>" checked /> <%= u %> <span class="muted">(élève d'un autre professeur)</span></label>
+						<% }) %>
+					</div>
+				<% } %>
+			</div>
+
+			<div class="actions">
+				<button type="submit"><%= quizId === null ? "Créer le quiz" : "Enregistrer les modifications" %></button>
+				<a href="/admin/quiz">Annuler</a>
+			</div>
+		</form>
+	</main>
+
+	<script>
+		const INITIAL = <%- JSON.stringify(quiz).replace(/</g, "\\u003c") %>;
+		const SAVE_URL = <%- JSON.stringify(quizId === null ? "/admin/quiz/manuel" : "/admin/quiz/" + quizId + "/manuel") %>;
+		const $ = (id) => document.getElementById(id);
+		let counter = 0;
+
+		// Numérote les questions et garde un groupe de boutons radio par question
+		function renumber() {
+			[...$("questions").children].forEach((block, i) => { block.querySelector(".num").textContent = "Question " + (i + 1); });
+		}
+
+		function addChoice(block, text = "", correct = false) {
+			const list = block.querySelector(".choices");
+			if (list.children.length >= 6) return;
+			const row = document.createElement("div");
+			row.className = "choice-row";
+			row.innerHTML = `<input type="radio" title="Bonne réponse" /><input type="text" maxlength="200" placeholder="Réponse" /><button type="button" class="link" title="Retirer">✕</button>`;
+			const radio = row.querySelector("input[type=radio]");
+			radio.name = block.dataset.group;
+			radio.checked = correct;
+			row.querySelector("input[type=text]").value = text;
+			const mark = () => list.querySelectorAll(".choice-row").forEach((r) => r.classList.toggle("correct", r.querySelector("input[type=radio]").checked));
+			radio.addEventListener("change", mark);
+			row.querySelector("button").addEventListener("click", () => { if (list.children.length > 2) { row.remove(); mark(); } });
+			list.appendChild(row);
+			mark();
+		}
+
+		function addQuestion(q = { text: "", choices: ["", "", ""], answer: 0 }) {
+			const block = document.createElement("div");
+			block.className = "question-block";
+			block.dataset.group = "q" + counter++;
+			block.innerHTML = `
+				<div class="head"><strong class="num"></strong><span class="actions">
+					<button type="button" class="link up" title="Monter">↑</button>
+					<button type="button" class="link down" title="Descendre">↓</button>
+					<button type="button" class="link remove" title="Supprimer la question">✕</button>
+				</span></div>
+				<textarea maxlength="500" placeholder="Énoncé de la question"></textarea>
+				<div class="choices"></div>
+				<button type="button" class="secondary add-choice">+ Réponse</button>`;
+			block.querySelector("textarea").value = q.text;
+			q.choices.forEach((c, i) => addChoice(block, c, i === q.answer));
+			block.querySelector(".add-choice").addEventListener("click", () => addChoice(block));
+			block.querySelector(".remove").addEventListener("click", () => { block.remove(); renumber(); });
+			block.querySelector(".up").addEventListener("click", () => { if (block.previousElementSibling) block.parentNode.insertBefore(block, block.previousElementSibling); renumber(); });
+			block.querySelector(".down").addEventListener("click", () => { if (block.nextElementSibling) block.parentNode.insertBefore(block.nextElementSibling, block); renumber(); });
+			$("questions").appendChild(block);
+			renumber();
+		}
+
+		function read() {
+			return {
+				title: $("title").value,
+				description: $("description").value,
+				students: [...document.querySelectorAll(".access-student:checked")].map((c) => c.value),
+				questions: [...$("questions").children].map((block) => {
+					// Les réponses vides sont ignorées ; l'index de la bonne réponse suit
+					const rows = [...block.querySelectorAll(".choice-row")].filter((r) => r.querySelector("input[type=text]").value.trim());
+					return {
+						text: block.querySelector("textarea").value,
+						choices: rows.map((r) => r.querySelector("input[type=text]").value),
+						answer: rows.findIndex((r) => r.querySelector("input[type=radio]").checked)
+					};
+				})
+			};
+		}
+
+		$("addQuestion").addEventListener("click", () => addQuestion());
+		$("manualForm").addEventListener("submit", async (e) => {
+			e.preventDefault();
+			try {
+				const response = await fetch(SAVE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(read()) });
+				const data = await response.json();
+				if (!response.ok) throw new Error(data.error || "Erreur du serveur.");
+				window.location.href = data.redirect;
+			} catch (error) {
+				$("error").textContent = error.message;
+				$("error").hidden = false;
+				window.scrollTo({ top: 0, behavior: "smooth" });
+			}
+		});
+
+		$("title").value = INITIAL.title;
+		$("description").value = INITIAL.description;
+		if (INITIAL.questions.length) INITIAL.questions.forEach(addQuestion); else addQuestion();
+	</script>
+</body>
+
+</html>
