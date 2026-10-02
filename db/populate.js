@@ -6,7 +6,7 @@ const SCHEMA = require("./schema");
 
 // Supprime tout, recrée les tables et ajoute des données de test (à utiliser en local uniquement)
 const SQL = `
-DROP TABLE IF EXISTS owned_items, companions, daily_student_quizzes, daily_quizzes, quiz_answers, quiz_results, questions, quizzes, users;
+DROP TABLE IF EXISTS templates, categories, quiz_access, teacher_students, owned_items, companions, daily_student_quizzes, daily_quizzes, quiz_answers, quiz_results, questions, quizzes, users;
 
 ${SCHEMA}
 
@@ -22,6 +22,12 @@ INSERT INTO questions (quiz_id, position, text, choices, answer) VALUES
 `;
 
 async function main() {
+	// Sécurité : ce script efface tout. Il ne tourne que sur une base locale (fichier .env),
+	// jamais en ligne ni avec DATABASE_URL (Railway, Neon…).
+	if (process.env.DATABASE_URL || process.env.NODE_ENV === "production" || process.env.RAILWAY_ENVIRONMENT) {
+		throw new Error("populate efface toutes les données : il est bloqué sur la base en ligne. Rien n'a été modifié.");
+	}
+
 	console.log("Création des tables...");
 	await pool.query(SQL);
 

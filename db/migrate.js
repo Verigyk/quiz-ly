@@ -106,6 +106,113 @@ async function main() {
 			);
 		`);
 
+		// Chaque élève appartient à un seul professeur. Au premier passage, s'il n'y a qu'un
+		// professeur, il récupère tous les élèves existants ; sinon ils restent « sans professeur ».
+		if (!(await columnExists(client, "users", "teacher"))) {
+			await client.query(`
+				ALTER TABLE users ADD COLUMN teacher TEXT REFERENCES users(username) ON DELETE SET NULL ON UPDATE CASCADE;
+				UPDATE users SET teacher = (SELECT username FROM users WHERE role = 'admin')
+					WHERE role = 'student' AND (SELECT COUNT(*) FROM users WHERE role = 'admin') = 1;
+			`);
+		}
+
+		// Quiz : propriétaire et accès restreint à certains élèves et professeurs.
+		// Les quiz existants restent communs (sans propriétaire) et visibles par tous.
+		await client.query(`
+			ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS owner TEXT REFERENCES users(username) ON DELETE SET NULL ON UPDATE CASCADE;
+			ALTER TABLE quizzes ADD COLUMN IF NOT EXISTS restricted BOOLEAN NOT NULL DEFAULT FALSE;
+			CREATE TABLE IF NOT EXISTS quiz_access (
+				quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+				username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+				PRIMARY KEY (quiz_id, username)
+			);
+		`);
+
+		// Quiz du jour : un planning par professeur. Le planning commun existant est copié pour chaque professeur.
+		if (!(await columnExists(client, "daily_quizzes", "teacher"))) {
+			await client.query(`
+				ALTER TABLE daily_quizzes DROP CONSTRAINT IF EXISTS daily_quizzes_pkey;
+				ALTER TABLE daily_quizzes ADD COLUMN teacher TEXT REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE;
+				INSERT INTO daily_quizzes (day, teacher, quiz_id)
+					SELECT d.day, u.username, d.quiz_id FROM daily_quizzes d CROSS JOIN users u
+					WHERE d.teacher IS NULL AND u.role = 'admin';
+				DELETE FROM daily_quizzes WHERE teacher IS NULL;
+				ALTER TABLE daily_quizzes ALTER COLUMN teacher SET NOT NULL;
+				ALTER TABLE daily_quizzes ADD PRIMARY KEY (day, teacher);
+			`);
+		}
+
+		// Quiz privés : visibles seulement par leur créateur et les élèves choisis.
+		// Les quiz qui étaient ouverts à tous restent accessibles à tous les élèves existants
+		// (le professeur peut ensuite décocher), et les accès donnés à des professeurs sont retirés.
+		if (await columnExists(client, "quizzes", "restricted")) {
+			await client.query(`
+				INSERT INTO quiz_access (quiz_id, username)
+					SELECT q.id, u.username FROM quizzes q CROSS JOIN users u
+					WHERE NOT q.restricted AND u.role = 'student'
+					ON CONFLICT DO NOTHING;
+				DELETE FROM quiz_access a USING users u WHERE u.username = a.username AND u.role = 'admin';
+				ALTER TABLE quizzes DROP COLUMN restricted;
+			`);
+		}
+
+		await client.query(`
+			-- Catégories personnelles d'un professeur (ex. « Mes identités remarquables »)
+			CREATE TABLE IF NOT EXISTS categories (
+				id SERIAL PRIMARY KEY,
+				owner TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+				name TEXT NOT NULL,
+				UNIQUE (owner, name)
+			);
+			
+			-- Modèles de questions : variables tirées au hasard, énoncé, bonne réponse et pièges (voir generators/custom.js)
+			CREATE TABLE IF NOT EXISTS templates (
+				id SERIAL PRIMARY KEY,
+				owner TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+				category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+				definition JSONB NOT NULL,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			);
+		`);
+
+		// Plusieurs professeurs par élève : l'ancien professeur unique (users.teacher) devient un lien,
+		// et les choix de quiz du jour par élève sont rattachés à ce professeur.
+		await client.query(`
+			-- Liens professeur ↔ élève : un élève peut avoir plusieurs professeurs
+			CREATE TABLE IF NOT EXISTS teacher_students (
+				teacher TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+				student TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+				joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				PRIMARY KEY (teacher, student)
+			);
+			ALTER TABLE users ADD COLUMN IF NOT EXISTS link_code TEXT UNIQUE;
+			ALTER TABLE users ADD COLUMN IF NOT EXISTS link_code_expires TIMESTAMPTZ;
+			-- Codes créés avant l'usage unique (sans date d'expiration) : ils ne sont plus valables
+			UPDATE users SET link_code = NULL WHERE link_code IS NOT NULL AND link_code_expires IS NULL;
+		`);
+		if (await columnExists(client, "users", "teacher")) {
+			await client.query(`
+				INSERT INTO teacher_students (teacher, student)
+					SELECT teacher, username FROM users WHERE teacher IS NOT NULL
+					ON CONFLICT DO NOTHING;
+				ALTER TABLE daily_student_quizzes ADD COLUMN IF NOT EXISTS teacher TEXT REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE;
+				UPDATE daily_student_quizzes s SET teacher = u.teacher FROM users u WHERE u.username = s.username AND s.teacher IS NULL;
+				DELETE FROM daily_student_quizzes WHERE teacher IS NULL;
+				ALTER TABLE daily_student_quizzes ALTER COLUMN teacher SET NOT NULL;
+				ALTER TABLE daily_student_quizzes DROP CONSTRAINT IF EXISTS daily_student_quizzes_pkey;
+				ALTER TABLE daily_student_quizzes ADD PRIMARY KEY (day, teacher, username);
+				ALTER TABLE users DROP COLUMN teacher;
+			`);
+		}
+
+		// Le compagnon est triste quand l'élève oublie le quiz du jour. Les jours passés ne sont pas
+		// comptés rétroactivement : la vérification commence à hier pour les compagnons existants.
+		await client.query(`
+			ALTER TABLE companions ADD COLUMN IF NOT EXISTS checked_until DATE NOT NULL DEFAULT (CURRENT_DATE - 1);
+			ALTER TABLE companions ADD COLUMN IF NOT EXISTS missed_quizzes INTEGER NOT NULL DEFAULT 0;
+			ALTER TABLE companions ADD COLUMN IF NOT EXISTS missed_on DATE;
+		`);
+
 		await client.query("COMMIT");
 		console.log("Base de données à jour.");
 	} catch (error) {

@@ -1,11 +1,17 @@
 const db = require("../db");
 const generators = require("../generators");
 const dates = require("../dates");
+const templates = require("./templateController");
+const linkDurations = require("../linkDurations");
+
+// Toutes les fonctions reçoivent « me » : le professeur connecté.
+// Un professeur ne voit et ne modifie que ses propres élèves (un élève peut avoir plusieurs professeurs).
 
 // ---------- Élèves ----------
 
-async function getStudents() {
-	return db.getStudents();
+async function getStudents(me) {
+	const [mine, unassigned, code] = await Promise.all([db.getStudents(me), db.getStudents(null), db.getLinkCode(me)]);
+	return { mine, unassigned, code };
 }
 
 function checkPassword(password) {
@@ -14,7 +20,8 @@ function checkPassword(password) {
 	}
 }
 
-async function createStudent(username, password) {
+// L'élève créé appartient au professeur qui le crée
+async function createStudent(me, username, password) {
 	username = username.normalize("NFC").trim();
 	password = password.normalize("NFC");
 	if (!/^[\p{L}\p{N}._-]{2,30}$/u.test(username)) {
@@ -24,84 +31,222 @@ async function createStudent(username, password) {
 	if (await db.userExist(username)) {
 		throw new Error(`L'identifiant « ${username} » est déjà utilisé.`);
 	}
-	await db.createStudent(username, password);
+	await db.createStudent(username, password, me);
 }
 
-async function setStudentPassword(username, password) {
+async function setStudentPassword(me, username, password) {
 	password = password.normalize("NFC");
 	checkPassword(password);
-	await db.setStudentPassword(username, password);
+	if (!(await db.setStudentPassword(username, password, me))) {
+		throw new Error("Cet élève n'est pas dans votre liste.");
+	}
 }
 
-async function deleteStudent(username) {
-	await db.deleteStudent(username);
+// Supprimer le compte n'est possible que pour son unique professeur ; sinon, on le retire de sa liste
+async function deleteStudent(me, username) {
+	if (!(await db.isStudentOf(username, me))) {
+		throw new Error("Cet élève n'est pas dans votre liste.");
+	}
+	if (!(await db.deleteStudent(username, me))) {
+		throw new Error("Cet élève a d'autres professeurs : retirez-le de votre liste au lieu de supprimer son compte.");
+	}
 }
 
-// Historique d'un élève ; null si ce n'est pas un élève
-async function getStudentHistory(username) {
-	if (!(await db.isStudent(username))) {
+// Retirer un élève de sa liste : son compte et ses autres professeurs restent
+async function unlinkStudent(me, username) {
+	if (!(await db.unlinkStudent(me, username))) {
+		throw new Error("Cet élève n'est pas dans votre liste.");
+	}
+}
+
+// Prendre en charge un élève qui n'a aucun professeur
+async function claimStudent(me, username) {
+	if (!(await db.claimStudent(me, username))) {
+		throw new Error("Cet élève a déjà un professeur : demandez-lui son code.");
+	}
+}
+
+// Ajouter un élève grâce au code qu'il a généré (usage unique) ; renvoie son identifiant
+async function linkByCode(me, code) {
+	const result = await db.useLinkCode(code, "student", me);
+	if (!result) {
+		throw new Error("Aucun élève ne correspond à ce code (il a peut-être expiré ou déjà servi).");
+	}
+	if (!result.linked) {
+		throw new Error(`« ${result.owner} » fait déjà partie de vos élèves.`);
+	}
+	return result.owner;
+}
+
+// body : durée choisie dans le formulaire (voir linkDurations.js)
+async function createCode(me, body) {
+	return db.createLinkCode(me, linkDurations.parse(body));
+}
+
+// Historique d'un de ses élèves ; null si ce n'est pas son élève
+async function getStudentHistory(me, username) {
+	if (!(await db.isStudentOf(username, me))) {
 		return null;
 	}
 	return db.getHistory(username);
 }
 
-async function getStudentResult(username, resultId) {
+async function getStudentResult(me, username, resultId) {
+	if (!(await db.isStudentOf(username, me))) {
+		return null;
+	}
 	return db.getResultDetail(resultId, username);
 }
 
 // ---------- Quiz ----------
 
-async function getQuizzes() {
-	return db.getQuizzes();
+// Un quiz commun (sans propriétaire) peut être modifié par tous les professeurs
+function canEdit(quiz, me) {
+	return quiz.owner === null || quiz.owner === me;
 }
 
-// Quiz généré à modifier ; null s'il n'existe pas ou a été écrit à la main
-async function getQuizConfig(id) {
+// Quiz accessibles au professeur, avec ce qu'il a le droit d'en faire
+async function getQuizzes(me) {
+	const quizzes = await db.getQuizzes(me);
+	return quizzes.map((q) => ({ ...q, editable: canEdit(q, me) }));
+}
+
+// Quiz généré à modifier ; null s'il n'existe pas, a été écrit à la main ou appartient à un autre professeur
+async function getQuizForEdit(me, id) {
 	const quiz = await db.getQuiz(id);
-	return quiz && quiz.config ? quiz.config : null;
+	if (!quiz || !quiz.config || quiz.config.manual || !canEdit(quiz, me)) {
+		return null;
+	}
+	return { config: quiz.config, students: quiz.access };
 }
 
-function catalog() {
-	return generators.catalog();
+// Élèves que le professeur peut autoriser : les siens
+async function getAccessChoices(me) {
+	return db.getStudentNames(me);
+}
+
+// Élèves cochés dans le formulaire. On ne garde que ceux du professeur, plus ceux qui avaient
+// déjà accès au quiz (par exemple un élève confié depuis à un collègue), pour ne pas les retirer sans le vouloir.
+async function normalizeStudents(me, raw, previous = []) {
+	const allowed = new Set([...(await db.getStudentNames(me)), ...previous]);
+	return [...new Set((Array.isArray(raw) ? raw : []).map(String))].filter((u) => allowed.has(u));
+}
+
+// Chapitres intégrés + catégories personnelles du professeur
+async function catalog(me) {
+	return generators.catalog(await templates.chaptersFor(me));
 }
 
 // Aperçu : questions générées avec la bonne réponse, sans rien enregistrer
-function preview(rawConfig) {
-	const config = generators.normalizeConfig(rawConfig);
-	return generators.generateQuiz(config);
+async function preview(me, rawConfig) {
+	const extra = await templates.chaptersFor(me);
+	const config = generators.normalizeConfig(rawConfig, extra);
+	return generators.generateQuiz(config, extra);
 }
 
 // Questions figées générées une fois pour toutes, ou null si régénérées à chaque tentative
-function frozenQuestions(config) {
+function frozenQuestions(config, extra) {
 	if (config.regenerate) {
 		return null;
 	}
-	return generators.generateQuiz(config).map(({ text, choices, answer }) => ({ text, choices, answer }));
+	return generators.generateQuiz(config, extra).map(({ text, choices, answer }) => ({ text, choices, answer }));
 }
 
-async function saveQuiz(id, rawConfig) {
-	const config = generators.normalizeConfig(rawConfig);
+async function saveQuiz(me, id, body) {
+	const extra = await templates.chaptersFor(me);
+	const config = generators.normalizeConfig(body, extra);
 	if (id === null) {
-		return db.createQuiz(config, frozenQuestions(config));
+		return db.createQuiz(config, frozenQuestions(config, extra), me, await normalizeStudents(me, body.students));
 	}
-	if (!(await getQuizConfig(id))) {
-		throw new Error("Ce quiz n'existe pas ou ne peut pas être modifié.");
+	const saved = await getQuizForEdit(me, id);
+	if (!saved) {
+		throw new Error("Ce quiz n'existe pas ou vous ne pouvez pas le modifier.");
 	}
-	await db.updateQuiz(id, config, frozenQuestions(config));
+	await db.updateQuiz(id, config, frozenQuestions(config, extra), await normalizeStudents(me, body.students, saved.students));
 	return id;
 }
 
-async function deleteQuiz(id) {
+// ---------- Quiz écrits à la main ----------
+
+// Quiz manuel à modifier (y compris les anciens quiz sans configuration) ; null sinon
+async function getManualQuizForEdit(me, id) {
+	const quiz = await db.getQuiz(id);
+	if (!quiz || (quiz.config && !quiz.config.manual) || !canEdit(quiz, me)) {
+		return null;
+	}
+	return {
+		title: quiz.title,
+		description: quiz.config ? quiz.config.description || "" : "",
+		questions: quiz.questions,
+		students: quiz.access
+	};
+}
+
+// Vérifie les questions écrites dans le formulaire : [{ text, choices: [..], answer: index }]
+function normalizeManual(body) {
+	const title = String(body.title || "").trim();
+	if (!title || title.length > 100) throw new Error("Le titre est obligatoire (100 caractères maximum).");
+	const raw = Array.isArray(body.questions) ? body.questions : [];
+	if (raw.length === 0 || raw.length > 50) throw new Error("Écrivez entre 1 et 50 questions.");
+	const questions = raw.map((q, i) => {
+		const text = String(q.text || "").trim().slice(0, 500);
+		const choices = (Array.isArray(q.choices) ? q.choices : []).map((c) => String(c).trim().slice(0, 200)).filter(Boolean);
+		if (!text) throw new Error(`Question ${i + 1} : écrivez l'énoncé.`);
+		if (choices.length < 2 || choices.length > 6) throw new Error(`Question ${i + 1} : il faut entre 2 et 6 réponses.`);
+		if (new Set(choices).size !== choices.length) throw new Error(`Question ${i + 1} : deux réponses sont identiques.`);
+		const answer = Number(q.answer);
+		if (!Number.isInteger(answer) || answer < 0 || answer >= choices.length) throw new Error(`Question ${i + 1} : cochez la bonne réponse.`);
+		return { text, choices, answer };
+	});
+	return { config: { manual: true, title, description: String(body.description || "").trim().slice(0, 500) }, questions };
+}
+
+async function saveManualQuiz(me, id, body) {
+	const { config, questions } = normalizeManual(body);
+	if (id === null) {
+		return db.createQuiz(config, questions, me, await normalizeStudents(me, body.students));
+	}
+	const saved = await getManualQuizForEdit(me, id);
+	if (!saved) {
+		throw new Error("Ce quiz n'existe pas ou vous ne pouvez pas le modifier.");
+	}
+	await db.updateQuiz(id, config, questions, await normalizeStudents(me, body.students, saved.students));
+	return id;
+}
+
+// Élèves d'un quiz (écrit à la main ou généré) ; null si le professeur ne peut pas le modifier
+async function getQuizStudents(me, id) {
+	const quiz = await db.getQuiz(id);
+	if (!quiz || !canEdit(quiz, me)) {
+		return null;
+	}
+	return { id: quiz.id, title: quiz.title, students: quiz.access };
+}
+
+async function saveQuizStudents(me, id, raw) {
+	const quiz = await getQuizStudents(me, id);
+	if (!quiz) {
+		throw new Error("Ce quiz n'existe pas ou vous ne pouvez pas le modifier.");
+	}
+	// Une seule case cochée arrive sous forme de texte, plusieurs sous forme de liste
+	await db.setQuizStudents(id, await normalizeStudents(me, [].concat(raw ?? []), quiz.students));
+}
+
+async function deleteQuiz(me, id) {
+	const quiz = await db.getQuiz(id);
+	if (!quiz || !canEdit(quiz, me)) {
+		throw new Error("Seul le professeur qui a créé ce quiz peut le supprimer.");
+	}
 	await db.deleteQuiz(id);
 }
 
 // ---------- Quiz du jour ----------
 
-// Semaine du lundi au dimanche contenant « day » : quiz de la classe et choix de chaque élève.
+// Semaine du lundi au dimanche contenant « day » : quiz de sa classe et choix pour chacun de ses élèves.
 // Les jours passés ne sont plus modifiables.
-async function getWeek(day) {
+async function getWeek(me, day) {
 	const start = dates.mondayOf(dates.isISODate(day) ? day : dates.today());
-	const [plan, students] = await Promise.all([db.getWeekPlan(start), db.getStudentNames()]);
+	const [plan, students] = await Promise.all([db.getWeekPlan(start, me), db.getStudentNames(me)]);
 	const today = dates.today();
 
 	const classQuiz = Object.fromEntries(plan.defaults.map((d) => [d.day, d.quiz_id]));
@@ -136,11 +281,11 @@ async function getWeek(day) {
 }
 
 // body.classe = { jour: id | "" } ; body.eleves = { élève: { jour: "classe" | "aucun" | id } }
-// Seuls aujourd'hui et les jours suivants sont enregistrés
-async function saveWeek(body) {
+// Seuls aujourd'hui et les jours suivants sont enregistrés, et seulement pour ses élèves
+async function saveWeek(me, body) {
 	const today = dates.today();
-	const quizIds = new Set((await db.getQuizzes()).map((q) => q.id));
-	const students = new Set(await db.getStudentNames());
+	const quizIds = new Set((await db.getQuizzes(me)).map((q) => q.id));
+	const students = new Set(await db.getStudentNames(me));
 	const editable = (day) => dates.isISODate(day) && day >= today;
 	const checkQuiz = (value) => {
 		const id = Number(value);
@@ -168,7 +313,7 @@ async function saveWeek(body) {
 		}
 	}
 
-	await db.setDailyPlan(defaults, overrides);
+	await db.setDailyPlan(me, defaults, overrides);
 }
 
 module.exports = {
@@ -176,13 +321,22 @@ module.exports = {
 	createStudent,
 	setStudentPassword,
 	deleteStudent,
+	unlinkStudent,
+	claimStudent,
+	linkByCode,
+	createCode,
 	getStudentHistory,
 	getStudentResult,
 	getQuizzes,
-	getQuizConfig,
+	getQuizForEdit,
+	getAccessChoices,
 	catalog,
 	preview,
 	saveQuiz,
+	getManualQuizForEdit,
+	saveManualQuiz,
+	getQuizStudents,
+	saveQuizStudents,
 	deleteQuiz,
 	getWeek,
 	saveWeek,

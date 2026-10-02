@@ -8,7 +8,11 @@
 		<% if (typeof isAdmin !== "undefined" && isAdmin) { %>
 			<a class="btn ghost small" href="/admin">Espace professeur</a>
 		<% } %>
+		<a class="btn ghost small" href="/plage">🏖️ La plage</a>
 		<a class="btn ghost small" href="/accueil/historique">Mon historique</a>
+		<% if (typeof isAdmin === "undefined" || !isAdmin) { %>
+			<a class="btn ghost small" href="/accueil/professeurs">Mes professeurs</a>
+		<% } %>
 		<form method="POST" action="/logout">
 			<button type="submit" class="btn ghost small">Se déconnecter</button>
 		</form>

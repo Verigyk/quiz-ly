@@ -12,10 +12,23 @@ const chapters = [
 	require("./secondDegre"),
 	require("./derivees"),
 	require("./suites"),
-	require("./trigonometrie")
+	require("./trigonometrie"),
+	// Physique-chimie (lycée)
+	require("./pcMecanique"),
+	require("./pcElectricite"),
+	require("./pcQuantiteMatiere"),
+	require("./pcAtome"),
+	require("./pcOndes"),
+	require("./pcAcidite")
 ];
 
 const byId = Object.fromEntries(chapters.map((c) => [c.id, c]));
+
+// Chapitre intégré, ou chapitre personnel d'un professeur (« extra », construit à partir de ses modèles)
+function findType(chapterId, typeId, extra = []) {
+	const chapter = Object.hasOwn(byId, chapterId) ? byId[chapterId] : extra.find((c) => c.id === chapterId);
+	return chapter && Object.hasOwn(chapter.types, typeId) ? chapter.types[typeId] : null;
+}
 
 const LIMITS = {
 	questionCount: [1, 50],
@@ -31,23 +44,31 @@ const TRAP_MODES = {
 	proches: "Réponses proches seulement (pas de pièges ciblés)"
 };
 
-// Liste des chapitres et types pour le formulaire de création, avec un exemple de question
-function catalog() {
-	return chapters.map((chapter) => ({
+// Liste des chapitres et types pour le formulaire de création, avec un exemple de question.
+// « extra » : les catégories personnelles du professeur, affichées en premier.
+function catalog(extra = []) {
+	return [...extra, ...chapters].map((chapter) => ({
 		id: chapter.id,
 		title: chapter.title,
 		level: chapter.level,
-		types: Object.entries(chapter.types).map(([id, type]) => ({
-			id,
-			label: type.label,
-			example: type.generate(2).text
-		}))
-	}));
+		// Matière : sert à regrouper les chapitres dans le formulaire de création
+		subject: chapter.custom ? "Mes catégories" : chapter.subject || "Mathématiques",
+		custom: Boolean(chapter.custom),
+		types: Object.entries(chapter.types).map(([id, type]) => {
+			let example;
+			try {
+				example = type.generate(2).text;
+			} catch (error) {
+				example = "(modèle en erreur : " + error.message + ")";
+			}
+			return { id, label: type.label, example };
+		})
+	})).filter((chapter) => chapter.types.length > 0);
 }
 
 // Question à choix multiples : { text, choices, answer (index), chapter, type, difficulty }
-function buildQuestion(item, choiceCount, trapMode) {
-	const type = byId[item.chapter].types[item.type];
+function buildQuestion(item, choiceCount, trapMode, extra) {
+	const type = findType(item.chapter, item.type, extra);
 	const q = type.generate(item.difficulty);
 
 	const wrong = [];
@@ -103,17 +124,22 @@ function distribute(items, total) {
 }
 
 // Génère toutes les questions d'un quiz à partir de sa configuration
-function generateQuiz(config) {
-	const counts = distribute(config.items, config.questionCount);
+function generateQuiz(config, extra = []) {
+	// Un modèle personnel supprimé depuis la création du quiz est ignoré
+	const items = config.items.filter((item) => findType(item.chapter, item.type, extra));
+	if (items.length === 0) {
+		throw new Error("Ce quiz n'utilise que des modèles de questions qui ont été supprimés.");
+	}
+	const counts = distribute(items, config.questionCount);
 	const seen = new Set();
 	const questions = [];
 
-	config.items.forEach((item, i) => {
+	items.forEach((item, i) => {
 		for (let n = 0; n < counts[i]; n++) {
 			let question;
 			// Évite deux questions identiques dans le même quiz
 			for (let tries = 0; tries < 20; tries++) {
-				question = buildQuestion(item, config.choiceCount, config.trapMode);
+				question = buildQuestion(item, config.choiceCount, config.trapMode, extra);
 				if (!seen.has(question.text)) break;
 			}
 			seen.add(question.text);
@@ -133,7 +159,7 @@ function clampInt(value, [min, max], name) {
 }
 
 // Vérifie et nettoie une configuration envoyée par le formulaire ; lève une erreur lisible sinon
-function normalizeConfig(raw) {
+function normalizeConfig(raw, extra = []) {
 	if (!raw || typeof raw !== "object") {
 		throw new Error("Configuration invalide.");
 	}
@@ -146,8 +172,7 @@ function normalizeConfig(raw) {
 	}
 
 	const items = raw.items.map((it, i) => {
-		const chapter = byId[it.chapter];
-		if (!chapter || !chapter.types[it.type]) {
+		if (!findType(it.chapter, it.type, extra)) {
 			throw new Error(`Type de question inconnu (ligne ${i + 1}).`);
 		}
 		return {
@@ -158,7 +183,7 @@ function normalizeConfig(raw) {
 		};
 	});
 
-	if (!(raw.trapMode in TRAP_MODES)) {
+	if (!Object.hasOwn(TRAP_MODES, raw.trapMode)) {
 		throw new Error("Mode de pièges inconnu.");
 	}
 

@@ -59,8 +59,13 @@ if (online && ["localhost", "127.0.0.1", "::1"].includes(host)) {
 	);
 }
 
-module.exports = new Pool({
+// Le fuseau horaire de la base est réglé une fois pour toutes par db/setup.js
+// (l'option de connexion « -c timezone » est refusée par certains hébergeurs comme Neon)
+const pool = new Pool({
 	...config,
-	ssl: useSsl ? { rejectUnauthorized: false } : undefined,
-	options: `-c timezone=${TIMEZONE}`
+	ssl: useSsl ? { rejectUnauthorized: false } : undefined
 });
+
+pool.timezone = TIMEZONE;
+
+module.exports = pool;

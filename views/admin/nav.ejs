@@ -3,7 +3,9 @@
 	<strong>✦ <%= siteName %></strong> <span class="muted">Espace professeur</span>
 	<a href="/admin" class="<%= active === 'eleves' ? 'active' : '' %>">Élèves</a>
 	<a href="/admin/quiz" class="<%= active === 'quiz' ? 'active' : '' %>">Quiz</a>
+	<a href="/admin/modeles" class="<%= active === 'modeles' ? 'active' : '' %>">Mes modèles</a>
 	<a href="/admin/quotidien" class="<%= active === 'quotidien' ? 'active' : '' %>">Quiz du jour</a>
+	<a href="/plage">La plage</a>
 	<a href="/accueil">Faire un quiz</a>
 	<span class="spacer"></span>
 	<form method="POST" action="/logout">

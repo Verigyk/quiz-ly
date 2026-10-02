@@ -6,6 +6,14 @@ const pool = require("./pool");
 const SCHEMA = require("./schema");
 
 async function main() {
+	// Dates calculées à l'heure française dans la base (quiz du jour, limite de points par jour).
+	// Réglé sur la base elle-même : chaque nouvelle connexion en hérite.
+	await pool.query(`
+		DO $$ BEGIN
+			EXECUTE format('ALTER DATABASE %I SET timezone TO %L', current_database(), '${pool.timezone.replace(/'/g, "")}');
+		END $$;
+	`);
+
 	const { rows } = await pool.query("SELECT to_regclass('public.users') IS NOT NULL AS exists");
 
 	if (rows[0].exists) {

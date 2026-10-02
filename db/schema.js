@@ -5,7 +5,18 @@ CREATE TABLE users (
 	password_hash TEXT NOT NULL,
 	role TEXT NOT NULL DEFAULT 'student' CHECK (role IN ('student', 'admin')),
 	points INTEGER NOT NULL DEFAULT 0,
+	-- Code pour s'associer entre professeur et élève (ex. « K7PX-3QMA ») : usage unique, jusqu'à link_code_expires
+	link_code TEXT UNIQUE,
+	link_code_expires TIMESTAMPTZ,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Liens professeur ↔ élève : un élève peut avoir plusieurs professeurs
+CREATE TABLE teacher_students (
+	teacher TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+	student TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+	joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+	PRIMARY KEY (teacher, student)
 );
 
 CREATE TABLE quizzes (
@@ -13,22 +24,51 @@ CREATE TABLE quizzes (
 	title TEXT NOT NULL,
 	-- Configuration du générateur de questions (NULL pour un quiz écrit à la main)
 	config JSONB,
+	-- Professeur qui a créé le quiz : seul professeur à le voir et à le modifier ; NULL = ancien quiz commun
+	owner TEXT REFERENCES users(username) ON DELETE SET NULL ON UPDATE CASCADE,
 	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Quiz du jour choisi par l'enseignant pour tous les élèves (un par date)
-CREATE TABLE daily_quizzes (
-	day DATE PRIMARY KEY,
-	quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE
+-- Catégories personnelles d'un professeur (ex. « Mes identités remarquables »)
+CREATE TABLE categories (
+	id SERIAL PRIMARY KEY,
+	owner TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+	name TEXT NOT NULL,
+	UNIQUE (owner, name)
 );
 
--- Quiz du jour particulier d'un élève (remplace celui de la classe) ; quiz_id NULL = pas de quiz ce jour-là
--- Si le quiz est supprimé, l'élève revient au quiz de la classe
+-- Modèles de questions : variables tirées au hasard, énoncé, bonne réponse et pièges (voir generators/custom.js)
+CREATE TABLE templates (
+	id SERIAL PRIMARY KEY,
+	owner TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+	category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+	definition JSONB NOT NULL,
+	created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Élèves choisis par le créateur du quiz : eux seuls peuvent le faire
+CREATE TABLE quiz_access (
+	quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+	username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+	PRIMARY KEY (quiz_id, username)
+);
+
+-- Quiz du jour choisi par un professeur pour toute sa classe (un par date et par professeur)
+CREATE TABLE daily_quizzes (
+	day DATE NOT NULL,
+	teacher TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+	quiz_id INTEGER NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
+	PRIMARY KEY (day, teacher)
+);
+
+-- Quiz du jour choisi par un professeur pour un de ses élèves (remplace celui de sa classe) ;
+-- quiz_id NULL = pas de quiz de ce professeur ce jour-là. Si le quiz est supprimé, l'élève revient au quiz de la classe.
 CREATE TABLE daily_student_quizzes (
 	day DATE NOT NULL,
-	username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
+	teacher TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
+	username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE ON UPDATE CASCADE,
 	quiz_id INTEGER REFERENCES quizzes(id) ON DELETE CASCADE,
-	PRIMARY KEY (day, username)
+	PRIMARY KEY (day, teacher, username)
 );
 
 -- Compagnon de l'élève : bonheur de 0 à 100, tenue portée ({ emplacement: objet })
@@ -39,7 +79,11 @@ CREATE TABLE companions (
 	last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 	visible BOOLEAN NOT NULL DEFAULT TRUE,
 	gifts INTEGER NOT NULL DEFAULT 0,
-	equipped JSONB NOT NULL DEFAULT '{}'
+	equipped JSONB NOT NULL DEFAULT '{}',
+	-- Quiz du jour oubliés : jours déjà vérifiés, et nombre de quiz oubliés trouvés le jour missed_on
+	checked_until DATE NOT NULL DEFAULT (CURRENT_DATE - 1),
+	missed_quizzes INTEGER NOT NULL DEFAULT 0,
+	missed_on DATE
 );
 
 -- Tenues achetées dans la boutique

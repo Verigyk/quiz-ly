@@ -155,6 +155,32 @@ function range(difficulty, easy, medium, hard) {
 	return [easy, medium, hard][difficulty - 1];
 }
 
+// ---------- Grandeurs physiques ----------
+
+// Arrondi à n chiffres significatifs
+function roundSig(x, n = 3) {
+	if (x === 0 || !Number.isFinite(x)) return x;
+	const p = Math.floor(Math.log10(Math.abs(x))) - n + 1;
+	return Math.round(x / 10 ** p) * 10 ** p;
+}
+
+// Écriture d'une mesure : « 2,5 », « 0,045 », « 3,2 × 10⁻⁴ » (puissances de 10 pour les très grandes ou très petites valeurs)
+function formatSig(x, n = 3) {
+	const r = roundSig(x, n);
+	if (r !== 0 && (Math.abs(r) >= 1e5 || Math.abs(r) < 1e-3)) {
+		const e = Math.floor(Math.log10(Math.abs(r)));
+		const m = Math.round((r / 10 ** e) * 10 ** (n - 1)) / 10 ** (n - 1);
+		return formatNumber(m) + " × 10" + sup(e);
+	}
+	return formatNumber(Math.round(r * 1e9) / 1e9);
+}
+
+// Réponse « valeur + unité » ; deux réponses sont égales si elles le sont à 3 chiffres significatifs
+function measureOption(value, unit, n = 3) {
+	if (!Number.isFinite(value)) return null;
+	return { text: formatSig(value, n) + (unit ? " " + unit : ""), key: "m:" + roundSig(value, n) + unit };
+}
+
 module.exports = {
 	randInt,
 	randNonZero,
@@ -174,5 +200,8 @@ module.exports = {
 	fractionText,
 	fractionOption,
 	textOption,
-	range
+	range,
+	roundSig,
+	formatSig,
+	measureOption
 };

@@ -1,10 +1,25 @@
 const db = require("../db");
 const companion = require("../companion");
+const dates = require("../dates");
 
 const DAY = 24 * 60 * 60 * 1000;
 
-// Charge le compagnon et applique le temps passé loin de lui :
-// il perd un peu de bonheur par jour d'absence, et il est ravi quand l'élève revient.
+// Quiz du jour non terminés entre le lendemain de « after » et « until » (inclus), jours au format AAAA-MM-JJ
+async function countMissedQuizzes(username, after, until) {
+	let missed = 0;
+	let day = dates.addDays(after, 1);
+	const oldest = dates.addDays(until, 1 - companion.MAX_DAYS_CHECKED);
+	if (day < oldest) day = oldest;
+	for (; day <= until; day = dates.addDays(day, 1)) {
+		const daily = await db.getDailyQuizzes(day, username);
+		missed += daily.filter((q) => !q.done).length;
+	}
+	return missed;
+}
+
+// Charge le compagnon et applique ce qui s'est passé depuis la dernière visite :
+// - il perd un peu de bonheur par jour d'absence, et il est ravi quand l'élève revient ;
+// - il est triste pour chaque quiz du jour que l'élève n'a pas fait (vérifié une fois par jour).
 async function load(username) {
 	const row = await db.getCompanion(username);
 	const daysAway = Math.floor((Date.now() - new Date(row.last_seen).getTime()) / DAY);
@@ -13,6 +28,19 @@ async function load(username) {
 		happiness = Math.max(0, happiness - companion.DAILY_DECAY * daysAway);
 	}
 	await db.updateCompanionPresence(username, happiness);
+
+	const today = dates.today();
+	const yesterday = dates.addDays(today, -1);
+	let missedQuizzes = row.missed_on === today ? row.missed_quizzes : 0;
+	if (row.checked_until < yesterday) {
+		const missed = await countMissedQuizzes(username, row.checked_until, yesterday);
+		if (missed > 0) {
+			happiness = Math.max(0, happiness - companion.MISSED_QUIZ_PENALTY * missed);
+			missedQuizzes = missed;
+		}
+		await db.updateCompanionMissed(username, happiness, yesterday, missedQuizzes, missed > 0 ? today : row.missed_on);
+	}
+	const pendingDaily = (await db.getDailyQuizzes(today, username)).some((q) => !q.done);
 
 	const mood = companion.mood(happiness);
 	return {
@@ -25,7 +53,9 @@ async function load(username) {
 		gifts: row.gifts,
 		equipped: row.equipped || {},
 		owned: row.owned || [],
-		missed: daysAway >= 1
+		missed: daysAway >= 1,
+		missedQuizzes,
+		pendingDaily
 	};
 }
 

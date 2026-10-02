@@ -2,15 +2,28 @@ const db = require("../db");
 const generators = require("../generators");
 const dates = require("../dates");
 const companion = require("../companion");
+const templates = require("./templateController");
+const linkDurations = require("../linkDurations");
 
-async function getQuizzes() {
-	return db.getQuizzes();
+// Quiz visibles par cet utilisateur (communs, ou restreints avec son accès)
+async function getQuizzes(username) {
+	return db.getQuizzes(username);
 }
 
-// Questions d'une tentative : générées à la volée, ou enregistrées (quiz manuel ou figé)
-function questionsFor(quiz) {
+// Un élève peut lancer un quiz auquel il a accès, ou le quiz du jour choisi pour lui par son professeur
+async function canStart(username, quizId) {
+	if (await db.canAccessQuiz(quizId, username)) {
+		return true;
+	}
+	const daily = await db.getDailyQuizzes(dates.today(), username);
+	return daily.some((d) => d.id === quizId);
+}
+
+// Questions d'une tentative : générées à la volée (avec les modèles personnels du quiz), ou enregistrées
+async function questionsFor(quiz) {
 	if (quiz.config && quiz.config.regenerate) {
-		return generators.generateQuiz(quiz.config).map(({ text, choices, answer }) => ({ text, choices, answer }));
+		const extra = await templates.chaptersForConfig(quiz.config);
+		return generators.generateQuiz(quiz.config, extra).map(({ text, choices, answer }) => ({ text, choices, answer }));
 	}
 	return quiz.questions;
 }
@@ -29,7 +42,10 @@ async function startQuiz(session, quizId) {
 	if (!quiz) {
 		throw new Error("Quiz does not exist.");
 	}
-	const questions = questionsFor(quiz);
+	if (!(await canStart(session.username, quiz.id))) {
+		throw new Error("No access to this quiz.");
+	}
+	const questions = await questionsFor(quiz);
 	if (questions.length === 0) {
 		throw new Error("Quiz has no questions.");
 	}
@@ -108,9 +124,9 @@ async function submitAnswer(session, answer) {
 		const total = progress.questions.length;
 		const [rewarded, daily] = await Promise.all([
 			db.countRewardedToday(session.username, progress.id),
-			db.getDailyQuiz(dates.today(), session.username)
+			db.getDailyQuizzes(dates.today(), session.username)
 		]);
-		const isDailyFirst = Boolean(daily && daily.id === progress.id && !daily.done);
+		const isDailyFirst = daily.some((d) => d.id === progress.id && !d.done);
 		progress.limitReached = rewarded >= companion.MAX_REWARDED_PER_DAY;
 		progress.points = progress.limitReached ? 0 : companion.quizPoints(progress.score, total, isDailyFirst);
 		progress.dailyBonus = isDailyFirst && !progress.limitReached;
@@ -147,13 +163,47 @@ async function getResultDetail(resultId, username) {
 	return db.getResultDetail(resultId, username);
 }
 
-async function getDailyQuiz(username) {
-	return db.getDailyQuiz(dates.today(), username);
+// Quiz du jour de l'élève (un par professeur au plus)
+async function getDailyQuizzes(username) {
+	return db.getDailyQuizzes(dates.today(), username);
+}
+
+// ---------- Professeurs de l'élève ----------
+
+async function getMyTeachers(username) {
+	const [teachers, code] = await Promise.all([db.getTeachersOf(username), db.getLinkCode(username)]);
+	return { teachers, code };
+}
+
+// Rejoindre un professeur grâce au code qu'il a généré (usage unique) ; renvoie son identifiant
+async function joinTeacher(username, code) {
+	const result = await db.useLinkCode(code, "admin", username);
+	if (!result) {
+		throw new Error("Aucun professeur ne correspond à ce code : il a peut-être expiré ou déjà servi. Demande un nouveau code à ton professeur.");
+	}
+	if (!result.linked) {
+		throw new Error(`Tu es déjà un élève de ${result.owner}.`);
+	}
+	return result.owner;
+}
+
+async function leaveTeacher(username, teacher) {
+	if (!(await db.unlinkStudent(teacher, username))) {
+		throw new Error("Ce professeur n'est pas dans ta liste.");
+	}
+}
+
+async function createMyCode(username, body) {
+	return db.createLinkCode(username, linkDurations.parse(body));
 }
 
 module.exports = {
 	getQuizzes,
-	getDailyQuiz,
+	getDailyQuizzes,
+	getMyTeachers,
+	joinTeacher,
+	leaveTeacher,
+	createMyCode,
 	getHistory,
 	getResultDetail,
 	startQuiz,

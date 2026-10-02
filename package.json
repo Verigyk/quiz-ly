@@ -4,12 +4,13 @@
   "description": "",
   "main": "app.js",
   "scripts": {
-    "start": "node app.js",
+    "start": "node db/setup.js && node app.js",
     "setup": "node db/setup.js",
     "populate": "node db/populate.js",
     "migrate": "node db/migrate.js",
     "create-admin": "node db/createAdmin.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "node app.js"
   },
   "keywords": [],
   "type": "commonjs",

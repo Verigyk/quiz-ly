@@ -94,6 +94,28 @@
 				</div>
 			</div>
 
+			<div class="card">
+				<h2>4. Élèves qui ont accès</h2>
+				<p class="muted">Seuls vous et les élèves cochés voient ce quiz. Les autres professeurs ne le voient pas.</p>
+				<% const extra = students.filter((u) => !myStudents.includes(u)); %>
+				<% if (myStudents.length === 0 && extra.length === 0) { %>
+					<p class="muted">Vous n'avez pas encore d'élèves : <a href="/admin">créez leurs comptes</a>, puis revenez cocher ceux qui auront accès.</p>
+				<% } else { %>
+					<div class="actions" style="margin-bottom: 10px">
+						<button type="button" class="secondary" id="checkAll">Tout cocher</button>
+						<button type="button" class="secondary" id="uncheckAll">Tout décocher</button>
+					</div>
+					<div class="grid">
+						<% myStudents.forEach((u) => { %>
+							<label><input type="checkbox" class="access-student" value="<%= u %>" <%= students.includes(u) ? "checked" : "" %> /> <%= u %></label>
+						<% }) %>
+						<% extra.forEach((u) => { %>
+							<label><input type="checkbox" class="access-student" value="<%= u %>" checked /> <%= u %> <span class="muted">(élève d'un autre professeur)</span></label>
+						<% }) %>
+					</div>
+				<% } %>
+			</div>
+
 			<div class="actions">
 				<button type="button" class="secondary" id="previewButton">Aperçu</button>
 				<button type="submit"><%= quizId === null ? "Créer le quiz" : "Enregistrer les modifications" %></button>
@@ -117,6 +139,20 @@
 		const $ = (id) => document.getElementById(id);
 		const itemsBody = $("items");
 		const chapterById = Object.fromEntries(CATALOG.map((c) => [c.id, c]));
+
+		// Chapitres regroupés par matière (Mes catégories, Mathématiques, Physique-chimie)
+		function chapterOptions(selectedId, withLevel) {
+			const groups = new Map();
+			CATALOG.forEach((c) => {
+				if (!groups.has(c.subject)) {
+					const g = document.createElement("optgroup");
+					g.label = c.subject;
+					groups.set(c.subject, g);
+				}
+				groups.get(c.subject).appendChild(option(c.id, withLevel ? `${c.title} — ${c.level}` : c.title, c.id === selectedId));
+			});
+			return [...groups.values()];
+		}
 
 		function option(value, label, selected) {
 			const o = document.createElement("option");
@@ -150,7 +186,7 @@
 				<td><button type="button" class="link remove" title="Retirer">✕</button></td>`;
 
 			row.querySelector(".chapter").replaceChildren(
-				...CATALOG.map((c) => option(c.id, `${c.title} — ${c.level}`, c.id === chapterId))
+				...chapterOptions(chapterId, true)
 			);
 			row.querySelector(".difficulty").replaceChildren(
 				...Object.entries(DIFFICULTIES).map(([v, l]) => option(v, l, Number(v) === (item.difficulty || 2)))
@@ -189,6 +225,7 @@
 				trapMode: $("trapMode").value,
 				order: $("order").value,
 				regenerate: $("regenerate").value === "true",
+				students: [...document.querySelectorAll(".access-student:checked")].map((c) => c.value),
 				items: [...itemsBody.children].map((r) => ({
 					chapter: r.querySelector(".chapter").value,
 					type: r.querySelector(".type").value,
@@ -261,13 +298,18 @@
 			addRow(last ? { chapter: last.querySelector(".chapter").value } : {});
 		});
 
-		$("chapterToAdd").replaceChildren(...CATALOG.map((c) => option(c.id, c.title, false)));
+		$("chapterToAdd").replaceChildren(...chapterOptions(null, false));
 		$("addChapter").addEventListener("click", () => {
 			const chapter = chapterById[$("chapterToAdd").value];
 			chapter.types.forEach((t) => addRow({ chapter: chapter.id, type: t.id }));
 		});
 
 		$("questionCount").addEventListener("input", updateCounts);
+
+		// Cocher ou décocher tous les élèves d'un coup
+		const setAll = (checked) => document.querySelectorAll(".access-student").forEach((c) => { c.checked = checked; });
+		$("checkAll")?.addEventListener("click", () => setAll(true));
+		$("uncheckAll")?.addEventListener("click", () => setAll(false));
 
 		// Formulaire pré-rempli pour une modification, sinon une première ligne vide
 		if (INITIAL) {

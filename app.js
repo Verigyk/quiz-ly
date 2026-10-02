@@ -40,6 +40,9 @@ app.set("view engine", "ejs");
 // Nom du site affiché sur toutes les pages
 app.locals.siteName = "Maths en quiz";
 
+// Durées proposées pour les codes d'association, utilisables dans les vues
+app.locals.linkDurations = require("./linkDurations");
+
 // Phrase du compagnon, utilisable dans les vues
 app.locals.companionLine = require("./companion").line;
 
@@ -48,6 +51,7 @@ const welcomeRouter = require("./routes/welcomeRouter");
 const quizRouter = require("./routes/quizRouter");
 const adminRouter = require("./routes/adminRouter");
 const companionRouter = require("./routes/companionRouter");
+const beachRouter = require("./routes/beachRouter");
 const companionController = require("./controllers/companionController");
 
 app.use("/", indexRouter);
@@ -67,6 +71,7 @@ async function loadCompanion(req, res, next) {
 
 app.use("/accueil", requireLogin, loadCompanion, welcomeRouter);
 app.use("/compagnon", requireLogin, loadCompanion, companionRouter);
+app.use("/plage", requireLogin, loadCompanion, beachRouter);
 // Espace professeur : réservé aux comptes admin
 function requireAdmin(req, res, next) {
     if (req.session.role !== "admin") {

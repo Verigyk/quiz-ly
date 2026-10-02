@@ -21,7 +21,8 @@
 				<div class="mood-bar" title="<%= companion.happiness %> / 100"><span class="<%= companion.mood %>" style="width: <%= companion.happiness %>%"></span></div>
 				<div class="muted small">
 					<%= companion.gifts %> cadeau<%= companion.gifts > 1 ? "x" : "" %> reçu<%= companion.gifts > 1 ? "s" : "" %>
-					· <%= companion.name %> s'ennuie un peu quand tu ne viens pas, et adore quand tu termines des quiz.
+					· <%= companion.name %> s'ennuie quand tu ne viens pas, est triste quand tu oublies le quiz du jour, et adore quand tu termines des quiz.
+					<% if (companion.missedQuizzes > 0) { %><br />😢 <%= companion.missedQuizzes %> quiz du jour oublié<%= companion.missedQuizzes > 1 ? "s" : "" %> depuis ta dernière visite.<% } %>
 				</div>
 
 				<div class="speech">
@@ -33,6 +34,7 @@
 				</div>
 
 				<div class="chips">
+					<a class="btn gold small" href="/plage">🏖️ Voir <%= companion.name %> sur la plage</a>
 					<span class="coins">🪙 <%= companion.points %> points</span>
 					<form method="POST" action="/compagnon/prenom" class="inline-form">
 						<input class="input" type="text" name="name" value="<%= companion.name %>" maxlength="20" required aria-label="Prénom du compagnon" />

@@ -40,21 +40,21 @@
 			</div>
 		</div>
 
-		<% if (dailyQuiz) { %>
-			<section class="card prophecy reveal">
-				<div class="label">Quiz du jour</div>
+		<% dailyQuizzes.forEach((dailyQuiz) => { %>
+			<section class="card prophecy reveal" style="margin-bottom: 16px">
+				<div class="label">Quiz du jour<%= dailyQuizzes.length > 1 ? " · " + dailyQuiz.teacher : "" %></div>
 				<h2><%= dailyQuiz.title %></h2>
 				<% if (dailyQuiz.description) { %><p class="muted"><%= dailyQuiz.description %></p><% } %>
 				<% if (dailyQuiz.done) { %>
 					<p class="done">✔ Fait aujourd'hui — meilleur score : <%= dailyQuiz.score %> / <%= dailyQuiz.total %></p>
 				<% } else { %>
-					<p class="muted">Choisi par ton professeur pour aujourd'hui.</p>
+					<p class="muted">Choisi par <%= dailyQuiz.teacher %> pour aujourd'hui.</p>
 				<% } %>
 				<form method="POST" action="/quiz/<%= dailyQuiz.id %>/start">
 					<button type="submit" class="btn gold big"><%= dailyQuiz.done ? "Améliorer mon score" : "Commencer le quiz du jour" %></button>
 				</form>
 			</section>
-		<% } %>
+		<% }) %>
 
 		<% if (inProgress) { %>
 			<section class="card resume reveal">

@@ -14,7 +14,10 @@
 	<main>
 		<div class="actions" style="justify-content: space-between">
 			<h1>Mes quiz</h1>
-			<a class="button" href="/admin/quiz/nouveau">+ Créer un quiz</a>
+			<span class="actions">
+				<a class="button" href="/admin/quiz/nouveau">+ Quiz généré</a>
+				<a class="button secondary" href="/admin/quiz/manuel/nouveau">+ Quiz écrit à la main</a>
+			</span>
 		</div>
 
 		<% if (flash) { %>
@@ -27,6 +30,7 @@
 					<th>Quiz</th>
 					<th>Questions</th>
 					<th>Réglages</th>
+					<th>Accès</th>
 					<th></th>
 				</tr>
 				<% quizzes.forEach((q) => { %>
@@ -34,6 +38,9 @@
 						<td>
 							<strong><%= q.title %></strong>
 							<% if (q.description) { %><div class="muted"><%= q.description %></div><% } %>
+							<div class="muted">
+								<%= q.owner === null ? "Ancien quiz commun" : "Créé par vous" %>
+							</div>
 						</td>
 						<td><%= q.count %></td>
 						<td>
@@ -46,14 +53,27 @@
 								<span class="muted">Quiz écrit à la main</span>
 							<% } %>
 						</td>
-						<td class="actions">
-							<% if (q.generated) { %>
-								<a href="/admin/quiz/<%= q.id %>/modifier">Modifier</a>
+						<td>
+							<% if (q.access.length === 0) { %>
+								<span class="muted"><%= q.owner === null ? "Tous les professeurs, aucun élève" : "Aucun élève" %></span>
+							<% } else { %>
+								<span class="tag"><%= q.access.length %> élève<%= q.access.length > 1 ? "s" : "" %></span>
+								<div class="muted" title="<%= q.access.join(', ') %>">
+									<%= q.access.slice(0, 4).join(", ") %><%= q.access.length > 4 ? " +" + (q.access.length - 4) : "" %>
+								</div>
 							<% } %>
-							<form method="POST" action="/admin/quiz/<%= q.id %>/supprimer" class="inline"
-								onsubmit="return confirm('Supprimer ce quiz ? L\'historique des élèves sera conservé.')">
-								<button type="submit" class="danger">Supprimer</button>
-							</form>
+						</td>
+						<td class="actions">
+							<% if (q.editable) { %>
+								<a href="/admin/quiz/<%= q.id %>/acces">Élèves</a>
+								<a href="/admin/quiz/<%= q.id %>/<%= q.generated ? "modifier" : "manuel" %>">Modifier</a>
+								<form method="POST" action="/admin/quiz/<%= q.id %>/supprimer" class="inline"
+									onsubmit="return confirm('Supprimer ce quiz ? L\'historique des élèves sera conservé.')">
+									<button type="submit" class="danger">Supprimer</button>
+								</form>
+							<% } else { %>
+								<span class="muted">Lecture seule</span>
+							<% } %>
 						</td>
 					</tr>
 				<% }) %>

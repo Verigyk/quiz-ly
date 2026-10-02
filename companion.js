@@ -26,6 +26,8 @@ const SLOTS = { tete: "Tête", cou: "Cou", yeux: "Yeux", dos: "Dos", ami: "Compa
 
 const DAILY_DECAY = 10; // bonheur perdu par jour d'absence
 const QUIZ_JOY = 5; // bonheur gagné quand l'élève termine un quiz
+const MISSED_QUIZ_PENALTY = 15; // bonheur perdu par quiz du jour oublié
+const MAX_DAYS_CHECKED = 14; // on ne remonte pas plus loin pour les quiz oubliés
 
 function mood(happiness) {
 	if (happiness < 35) return "triste";
@@ -49,6 +51,18 @@ const LINES = {
 		"Te revoilà !! Tu m'as trop manqué !",
 		"C'est toi ! Je t'attendais depuis des jours…",
 		"Enfin ! Je commençais à me sentir bien seul·e…"
+	],
+	// Quiz du jour oubliés (les jours précédents)
+	missedQuiz: [
+		"Tu n'as pas fait ton quiz du jour… Je l'ai attendu toute la journée.",
+		"Le quiz du jour est resté tout seul hier… et moi aussi, un peu.",
+		"J'étais triste que tu oublies le quiz du jour. On se rattrape aujourd'hui ?"
+	],
+	// Quiz du jour d'aujourd'hui pas encore fait
+	pendingDaily: [
+		"Le quiz du jour t'attend ! On le fait ensemble ?",
+		"Tu as pensé au quiz du jour ? Je serais trop content·e !",
+		"Psst… ton professeur t'a préparé un quiz du jour."
 	],
 	accueil: {
 		triste: ["Je me sens un peu seul·e aujourd'hui…", "Tu restes un peu avec moi ?", "Un petit quiz ensemble ? Ça me changerait les idées."],
@@ -78,12 +92,14 @@ function pick(list) {
 // Phrase du compagnon selon la page, son humeur et ce qui vient de se passer
 function line(companion, context, event = {}) {
 	if (companion.missed && context === "accueil") return pick(LINES.missed);
+	if (companion.missedQuizzes > 0 && context === "accueil") return pick(LINES.missedQuiz);
 	if (event.correct === true) return pick(LINES.correct);
 	if (event.correct === false) return pick(LINES.wrong);
 	if (context === "resultat") {
 		const ratio = event.total ? event.score / event.total : 0;
 		return pick(LINES.resultat[ratio >= 0.8 ? "bon" : ratio >= 0.5 ? "moyen" : "faible"]);
 	}
+	if (companion.pendingDaily && (context === "accueil" || context === "historique" || context === "boutique")) return pick(LINES.pendingDaily);
 	const byMood = LINES[context];
 	if (!byMood) return pick(LINES.accueil[companion.mood]);
 	return pick(Array.isArray(byMood) ? byMood : byMood[companion.mood]);
@@ -95,6 +111,8 @@ module.exports = {
 	SLOTS,
 	DAILY_DECAY,
 	QUIZ_JOY,
+	MISSED_QUIZ_PENALTY,
+	MAX_DAYS_CHECKED,
 	MAX_REWARDED_PER_DAY,
 	MOOD_LABELS,
 	mood,
